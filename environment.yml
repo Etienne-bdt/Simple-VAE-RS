@@ -1,0 +1,9 @@
+name: vae-rs
+dependencies:
+  - numpy
+  - rasterio
+  - tqdm
+  - matplotlib
+  - pip
+  - pip:
+      - torch
