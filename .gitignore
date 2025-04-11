@@ -1,4 +1,5 @@
 floods/*
 __pycache__/
-slurm.*
+slurm_logs/*
 runs/
+*.pth

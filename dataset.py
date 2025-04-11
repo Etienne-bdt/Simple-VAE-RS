@@ -36,3 +36,13 @@ class FloodDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.patches[idx]
+
+class Sen2VenDataset(Dataset):
+    def __init__(self):
+        super(Sen2VenDataset, self).__init__()
+        
+    def __len__(self):
+        pass 
+
+    def __getitem__(self, idx):
+        pass

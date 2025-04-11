@@ -1,3 +1,4 @@
+import os
 import torch 
 from model import VAE
 from loss import loss_function
@@ -5,9 +6,11 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from dataset import FloodDataset
 from torch.utils.data import DataLoader
-
+import argparse
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def train(model, train_loader, val_loader, gamma, optimizer, epochs):
     writer = SummaryWriter()  # Initialize TensorBoard writer
@@ -23,7 +26,7 @@ def train(model, train_loader, val_loader, gamma, optimizer, epochs):
         train_loss_mse = 0
         train_loss_kld = 0
         train_loss = 0
-        for batch_idx, data in tqdm(enumerate(train_loader)):
+        for _, data in tqdm(enumerate(train_loader)):
             data = data.to(device)
             optimizer.zero_grad()
             recon_batch, mu, logvar = model(data)
@@ -49,7 +52,12 @@ def train(model, train_loader, val_loader, gamma, optimizer, epochs):
         val_loss_mse = 0
         val_loss_kld = 0
         val_loss = 0
-        for batch_idx, data in enumerate(val_loader):
+        model.eval()
+        with torch.no_grad():
+            for _, data in enumerate(val_loader):
+                data = data.to(device)
+                recon_batch, mu, logvar = model(data)
+                mse, kld = loss_function(recon_batch, data, mu, logvar, gamma)
                 v_loss = mse + kld
                 val_loss_kld += kld.item()
                 val_loss_mse += mse.item()
@@ -72,8 +80,14 @@ def train(model, train_loader, val_loader, gamma, optimizer, epochs):
     writer.close()  # Close the TensorBoard writer
     return t_mse, t_kld, v_mse, v_kld, gamma_vals
 
-def init_dataloader():
-    ds = FloodDataset(patch_size=256)
+def init_dataloader(dataset:str):
+    if dataset == "Sen2Venus":
+        
+        ds = FloodDataset(patch_size=256)
+    elif dataset == "Floods" or dataset == "floods":
+        ds = FloodDataset(patch_size=256)
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
     train_size = int(0.8 * len(ds))
     val_size = len(ds) - train_size
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
@@ -81,10 +95,10 @@ def init_dataloader():
     val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=6)
     return train_loader, val_loader
 
-def main():
-    train_loader , val_loader = init_dataloader()
+def main(args):
+
+    train_loader, val_loader = init_dataloader(args.dataset)
     print(f"Train dataset size: {len(train_loader.dataset)}")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     latent_size = 4096
     model = VAE(latent_size).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -92,13 +106,30 @@ def main():
     gamma.requires_grad = True
     optimizer.add_param_group({'params': gamma})
     print("Training the model...")
-    t_mse, t_kld, v_mse, v_kld, gamma_vals = train(model, train_loader, val_loader, gamma, optimizer, epochs=200)
+    if os.path.exists('vae_model.pth'):
+        model.load_state_dict(torch.load('vae_model.pth'))
+        model.eval()
+        print("Model loaded from file.")           
+    else:
+        train(model, train_loader, val_loader, gamma, optimizer, epochs=200)
+        # Save the model
+        torch.save(model.state_dict(), 'vae_model.pth')
 
-    # Save the model
-    torch.save(model.state_dict(), 'vae_model.pth')
 
-    
+    z_sample = torch.randn(1, latent_size).to(device)
+    recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
+    plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')
+
+def parse_args():
+    """
+    Parse command line arguments. Notably to set the number of epochs or change the dataset.
+    """
+    parser = argparse.ArgumentParser(description="Train a VAE model.")
+    parser.add_argument("--epochs", type=int, default=50, help="Number of epochs to train the model.")
+    parser.add_argument("--dataset", type=str, default="floods", help="Type of the dataset")
+
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    print("Starting training...")
-    main()
+    args = parse_args()
+    main(args)

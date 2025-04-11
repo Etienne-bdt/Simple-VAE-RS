@@ -4,8 +4,8 @@
 #SBATCH --ntasks-per-node=12
 #SBATCH --time=1-00:00:00
 #SBATCH --job-name=VAE
-#SBATCH -o slurm.%j.out # STDOUT
-#SBATCH -e slurm.%j.err # STDERR
+#SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
+#SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
 #SBATCH --partition=gpu02
 #SBATCH --gres=gpu:1
 
