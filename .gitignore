@@ -3,3 +3,4 @@ __pycache__/
 slurm_logs/*
 runs/
 *.pth
+ARM/
