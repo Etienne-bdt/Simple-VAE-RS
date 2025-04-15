@@ -4,6 +4,7 @@ dependencies:
   - rasterio
   - tqdm
   - matplotlib
+  - conda-forge::polars
   - pip
   - pip:
       - torch

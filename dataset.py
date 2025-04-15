@@ -1,9 +1,9 @@
 import torch
-import torch.nn as nn
 from torch.utils.data import Dataset
 import rasterio
 import os
 import numpy as np
+import polars as pl
 
 class FloodDataset(Dataset):
     def __init__(self, patch_size=64):
@@ -38,11 +38,19 @@ class FloodDataset(Dataset):
         return self.patches[idx]
 
 class Sen2VenDataset(Dataset):
-    def __init__(self):
+    def __init__(self, csv_path="./ARM/index.csv", bands="visu"):
         super(Sen2VenDataset, self).__init__()
-        
+        self.df = pl.read_csv(csv_path, has_header=True, separator="	")
+        print(self.df.get_columns())
+        if bands == "visu":
+            self.df = self.df.select(['b2b3b4b8_10m', 'b2b3b4b8_05m'])
     def __len__(self):
-        pass 
+        return len(self.df)
 
     def __getitem__(self, idx):
         pass
+
+if __name__ == "__main__":
+    dataset = Sen2VenDataset()
+    print(dataset.df)
+    print(len(dataset))
