@@ -6,7 +6,7 @@ class VAE(nn.Module):
         super(VAE, self).__init__()
         self.latent_size = latent_size
         self.encoder = nn.Sequential(
-            nn.Conv2d(15, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
+            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
             nn.ReLU(),
@@ -21,7 +21,7 @@ class VAE(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # 64 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 15, kernel_size=8, stride=2, padding=1),  # 32 input channels
+            nn.ConvTranspose2d(32, 4, kernel_size=8, stride=2, padding=1),  # 32 input channels
             nn.Sigmoid())
         # 4 output channels (same as input)
 

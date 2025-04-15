@@ -43,11 +43,11 @@ class Sen2VenDataset(Dataset):
         self.dataset = os.path.join(os.getcwd(), dataset)
         csv_path = os.path.join(self.dataset, "index.csv")
         self.df = pl.read_csv(csv_path, has_header=True, separator="	")
-        print(self.df.get_columns())
         if bands == "visu":
             self.df = self.df.select(['b2b3b4b8_10m', 'b2b3b4b8_05m'])
             self.p0 = "b2b3b4b8_10m"
             self.p1 = "b2b3b4b8_05m"
+            
     def __len__(self):
         return len(self.df)
 
@@ -70,9 +70,3 @@ class Sen2VenDataset(Dataset):
         img2 = torch.tensor(img2, dtype=torch.float32) / 255.0
         
         return img1, img2
-
-if __name__ == "__main__":
-    dataset = Sen2VenDataset()
-    print(dataset.df)
-    print(len(dataset))
-    print(dataset[0][1].shape)

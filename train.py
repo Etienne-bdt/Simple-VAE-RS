@@ -1,13 +1,15 @@
-import os
-import torch 
-from model import VAE
-from loss import loss_function
-from tqdm import tqdm
-from torch.utils.tensorboard import SummaryWriter
-from dataset import FloodDataset
-from torch.utils.data import DataLoader
 import argparse
+import os
+
 import matplotlib.pyplot as plt
+import torch
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+from dataset import FloodDataset, Sen2VenDataset
+from loss import loss_function
+from model import VAE
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -27,7 +29,8 @@ def train(model, train_loader, val_loader, gamma, optimizer, epochs):
         train_loss_kld = 0
         train_loss = 0
         for _, data in tqdm(enumerate(train_loader)):
-            data = data.to(device)
+            _,y = data
+            data = y.to(device)
             optimizer.zero_grad()
             recon_batch, mu, logvar = model(data)
             mse, kld = loss_function(recon_batch, data, mu, logvar, gamma)
@@ -55,7 +58,8 @@ def train(model, train_loader, val_loader, gamma, optimizer, epochs):
         model.eval()
         with torch.no_grad():
             for _, data in enumerate(val_loader):
-                data = data.to(device)
+                _,y  = data
+                data = y.to(device)
                 recon_batch, mu, logvar = model(data)
                 mse, kld = loss_function(recon_batch, data, mu, logvar, gamma)
                 v_loss = mse + kld
@@ -81,9 +85,9 @@ def train(model, train_loader, val_loader, gamma, optimizer, epochs):
     return t_mse, t_kld, v_mse, v_kld, gamma_vals
 
 def init_dataloader(dataset:str):
-    if dataset == "Sen2Venus":
-        
-        ds = FloodDataset(patch_size=256)
+    if dataset == "Sen2Venus" or dataset == "sen2venus" or dataset == "s2v":
+        ds = Sen2VenDataset()
+
     elif dataset == "Floods" or dataset == "floods":
         ds = FloodDataset(patch_size=256)
     else:
@@ -98,7 +102,6 @@ def init_dataloader(dataset:str):
 def main(args):
 
     train_loader, val_loader = init_dataloader(args.dataset)
-    print(f"Train dataset size: {len(train_loader.dataset)}")
     latent_size = 4096
     model = VAE(latent_size).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -111,7 +114,7 @@ def main(args):
         model.eval()
         print("Model loaded from file.")           
     else:
-        train(model, train_loader, val_loader, gamma, optimizer, epochs=200)
+        train(model, train_loader, val_loader, gamma, optimizer, epochs=args.epochs)
         # Save the model
         torch.save(model.state_dict(), 'vae_model.pth')
 
@@ -126,7 +129,7 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description="Train a VAE model.")
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs to train the model.")
-    parser.add_argument("--dataset", type=str, default="floods", help="Type of the dataset")
+    parser.add_argument("--dataset", type=str, default="s2v", help="Type of the dataset")
 
     return parser.parse_args()
 
