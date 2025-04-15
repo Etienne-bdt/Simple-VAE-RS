@@ -38,19 +38,41 @@ class FloodDataset(Dataset):
         return self.patches[idx]
 
 class Sen2VenDataset(Dataset):
-    def __init__(self, csv_path="./ARM/index.csv", bands="visu"):
+    def __init__(self, dataset="ARM", bands="visu"):
         super(Sen2VenDataset, self).__init__()
+        self.dataset = os.path.join(os.getcwd(), dataset)
+        csv_path = os.path.join(self.dataset, "index.csv")
         self.df = pl.read_csv(csv_path, has_header=True, separator="	")
         print(self.df.get_columns())
         if bands == "visu":
             self.df = self.df.select(['b2b3b4b8_10m', 'b2b3b4b8_05m'])
+            self.p0 = "b2b3b4b8_10m"
+            self.p1 = "b2b3b4b8_05m"
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
-        pass
+        item_path = self.df[idx]
+        p1 = item_path[self.p0].to_numpy()[0]
+        p2 = item_path[self.p1].to_numpy()[0]
+
+        p1 = os.path.join(self.dataset, p1)
+        p2 = os.path.join(self.dataset, p2)
+
+        # Load the images using rasterio
+        with rasterio.open(p1) as src1:
+            img1 = src1.read()  # Read all bands
+        with rasterio.open(p2) as src2:
+            img2 = src2.read()  # Read all bands
+        
+        # Normalize the images
+        img1 = torch.tensor(img1, dtype=torch.float32) / 255.0
+        img2 = torch.tensor(img2, dtype=torch.float32) / 255.0
+        
+        return img1, img2
 
 if __name__ == "__main__":
     dataset = Sen2VenDataset()
     print(dataset.df)
     print(len(dataset))
+    print(dataset[0][1].shape)
