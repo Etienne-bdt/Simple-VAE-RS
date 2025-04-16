@@ -120,7 +120,7 @@ def main(args):
     devices=2,
     num_nodes=1,
     accelerator="cuda",
-    strategy="dp",
+    strategy="fsdp",
     max_epochs=args.epochs,
     callbacks=[
         clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
