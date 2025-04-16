@@ -115,10 +115,9 @@ def main(args):
     """
 
     trainer = L.Trainer(
-    devices=2,
+    devices=1,
     num_nodes=1,
     accelerator="cuda",
-    strategy="fsdp",
     max_epochs=args.epochs,
     log_every_n_steps=50,
     callbacks=[
