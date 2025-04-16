@@ -9,10 +9,10 @@ from tqdm import tqdm
 
 from dataset import FloodDataset, Sen2VenDataset
 from loss import loss_function
-from model import VAE
+from model import VAE_Lightning
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+import lightning as L
+import lightning.pytorch.callbacks as clb
 
 def train(model, train_loader, val_loader, gamma, optimizer, epochs):
     writer = SummaryWriter()  # Initialize TensorBoard writer
@@ -95,20 +95,17 @@ def init_dataloader(dataset:str):
     train_size = int(0.8 * len(ds))
     val_size = len(ds) - train_size
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
-    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=6)
-    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=6)
+    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False)
     return train_loader, val_loader
 
 def main(args):
 
     train_loader, val_loader = init_dataloader(args.dataset)
     latent_size = 4096
-    model = VAE(latent_size).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    gamma = torch.tensor([0.75]).to(device)
-    gamma.requires_grad = True
-    optimizer.add_param_group({'params': gamma})
-    print("Training the model...")
+    model = VAE_Lightning(latent_size)
+
+    """print("Training the model...")
     if os.path.exists('vae_model.pth'):
         model.load_state_dict(torch.load('vae_model.pth'))
         model.eval()
@@ -117,7 +114,21 @@ def main(args):
         train(model, train_loader, val_loader, gamma, optimizer, epochs=args.epochs)
         # Save the model
         torch.save(model.state_dict(), 'vae_model.pth')
+    """
 
+    trainer = L.Trainer(
+    devices=2,
+    num_nodes=1,
+    accelerator="cuda",
+    strategy="fsdp",
+    max_epochs=1,
+    profiler="simple",
+    callbacks=[clb.EarlyStopping(monitor="val_loss", patience=10),
+               clb.ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="best_model"),
+               clb.DeviceStatsMonitor()],
+    )
+
+    trainer.fit(model, train_loader, val_loader)
 
     z_sample = torch.randn(1, latent_size).to(device)
     recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()

@@ -1,6 +1,12 @@
-floods/*
+# Python-related files
 __pycache__/
-slurm_logs/*
-runs/
 *.pth
+
+# Logs and checkpoints
+lightning_logs/
+runs/
+slurm_logs/
+
+# Project-specific directories
 ARM/
+floods/

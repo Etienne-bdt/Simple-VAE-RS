@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import lightning as L
+from loss import loss_function
 
 class VAE(nn.Module):
     def __init__(self, latent_size):
@@ -51,3 +53,38 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
+class VAE_Lightning(L.LightningModule):
+    def __init__(self, latent_size):
+        super(VAE_Lightning, self).__init__()
+        self.model = VAE(latent_size)
+        self.gamma = torch.nn.Parameter(torch.tensor(0.25), requires_grad=True)
+
+    def training_step(self, batch, batch_idx):
+        _, data = batch
+        recon_batch, mu, logvar = self.model(data)
+        mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
+        loss = mse + kld
+        values = { "loss": loss, "mse": mse, "kld": kld}
+        self.log_dict(values, prog_bar=True)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        _, data = batch
+        recon_batch, mu, logvar = self.model(data)
+        mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
+        loss = mse + kld
+        values = { "loss": loss, "mse": mse, "kld": kld , "gamma": self.gamma}
+        self.log_dict(values)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        optimizer.add_param_group({'params': self.gamma})
+        return optimizer
+    
+    def on_train_start(self) -> None:
+        t_logger = self.logger
+        prototype_array = torch.zeros(1, 4, 256, 256)
+        t_logger.log_graph(model=self, input_array=prototype_array)
+        return super().on_train_start()
+    
