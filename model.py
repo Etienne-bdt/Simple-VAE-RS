@@ -57,7 +57,8 @@ class VAE_Lightning(L.LightningModule):
     def __init__(self, latent_size):
         super(VAE_Lightning, self).__init__()
         self.model = VAE(latent_size)
-        self.gamma = torch.nn.Parameter(torch.tensor(0.25), requires_grad=True)
+        self.gamma = torch.tensor(0.25)
+        self.gamma.requires_grad = True
 
     def training_step(self, batch, batch_idx):
         _, data = batch
