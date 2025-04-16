@@ -95,8 +95,8 @@ def init_dataloader(dataset:str):
     train_size = int(0.8 * len(ds))
     val_size = len(ds) - train_size
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
-    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=6)
+    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=6)
     return train_loader, val_loader
 
 def main(args):
@@ -120,19 +120,24 @@ def main(args):
     devices=2,
     num_nodes=1,
     accelerator="cuda",
-    strategy="fsdp",
-    max_epochs=1,
-    profiler="simple",
-    callbacks=[clb.EarlyStopping(monitor="val_loss", patience=10),
-               clb.ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="best_model"),
-               clb.DeviceStatsMonitor()],
+    strategy="dp",
+    max_epochs=args.epochs,
+    callbacks=[
+        clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
+        clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
+    ]
     )
 
     trainer.fit(model, train_loader, val_loader)
-
+    """
     z_sample = torch.randn(1, latent_size).to(device)
     recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
-    plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')
+    plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')"""
+
+    _,data = next(iter(val_loader))
+    recon_batch, mu, logvar = model(data)
+    recon_batch = recon_batch[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
+    plt.imsave('sample_reconstruction.png', recon_batch, cmap='gray')
 
 def parse_args():
     """

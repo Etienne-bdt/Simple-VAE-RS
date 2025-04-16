@@ -8,6 +8,7 @@
 #SBATCH --partition=gpu02
 #SBATCH --gres=gpu:2
 #SBATCH --ntasks-per-node=2
+#SBATCH --cpus-per-task=6
 
 module load python/3.8
 

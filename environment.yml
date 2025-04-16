@@ -13,3 +13,4 @@ dependencies:
       - torch
       - lightning
       - tensorboard
+      - standard-imghdr
