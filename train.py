@@ -1,10 +1,8 @@
 import argparse
-import os
 
 import matplotlib.pyplot as plt
 import torch
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
 
 from dataset import FloodDataset, Sen2VenDataset
@@ -122,6 +120,7 @@ def main(args):
     accelerator="cuda",
     strategy="fsdp",
     max_epochs=args.epochs,
+    log_every_n_steps=50,
     callbacks=[
         clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
         clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
