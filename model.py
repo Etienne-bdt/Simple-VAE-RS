@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import lightning as L
+from loss import loss_function
 
 class VAE(nn.Module):
     def __init__(self, latent_size):
@@ -51,3 +53,38 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
+class VAE_Lightning(L.LightningModule):
+    def __init__(self, latent_size):
+        super(VAE_Lightning, self).__init__()
+        self.model = VAE(latent_size)
+        self.gamma = torch.nn.Parameter(torch.ones(1), requires_grad=True)
+
+
+    def training_step(self, batch, batch_idx):
+        _, data = batch
+        recon_batch, mu, logvar = self.model(data)
+        mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
+        loss = mse + kld
+        values = { "loss": loss, "mse": mse, "kld": kld}
+        self.log_dict(values, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
+        return loss
+    
+
+    def validation_step(self, batch, batch_idx):
+        _, data = batch
+        recon_batch, mu, logvar = self.model(data)
+        mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
+        loss = mse + kld
+        values = { "val_loss": loss, "val_mse": mse, "val_kld": kld , "gamma": self.gamma.item()}
+        self.log_dict(values, on_epoch=True, on_step=False, sync_dist=True)
+        return loss
+
+    def on_train_end(self) -> None:
+        print(f"Final gamma value: {self.gamma.item()}")
+        return super().on_train_end()
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        optimizer.add_param_group({'params': self.gamma})
+        return optimizer
+    

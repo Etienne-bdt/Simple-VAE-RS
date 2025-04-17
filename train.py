@@ -1,18 +1,16 @@
 import argparse
-import os
 
 import matplotlib.pyplot as plt
 import torch
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
 
 from dataset import FloodDataset, Sen2VenDataset
 from loss import loss_function
-from model import VAE
+from model import VAE_Lightning
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+import lightning as L
+import lightning.pytorch.callbacks as clb
 
 def train(model, train_loader, val_loader, gamma, optimizer, epochs):
     writer = SummaryWriter()  # Initialize TensorBoard writer
@@ -103,12 +101,9 @@ def main(args):
 
     train_loader, val_loader = init_dataloader(args.dataset)
     latent_size = 4096
-    model = VAE(latent_size).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    gamma = torch.tensor([0.75]).to(device)
-    gamma.requires_grad = True
-    optimizer.add_param_group({'params': gamma})
-    print("Training the model...")
+    model = VAE_Lightning(latent_size)
+
+    """print("Training the model...")
     if os.path.exists('vae_model.pth'):
         model.load_state_dict(torch.load('vae_model.pth'))
         model.eval()
@@ -117,11 +112,30 @@ def main(args):
         train(model, train_loader, val_loader, gamma, optimizer, epochs=args.epochs)
         # Save the model
         torch.save(model.state_dict(), 'vae_model.pth')
+    """
 
+    trainer = L.Trainer(
+    devices=1,
+    num_nodes=1,
+    accelerator="cuda",
+    max_epochs=args.epochs,
+    log_every_n_steps=50,
+    callbacks=[
+        clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
+        clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
+    ]
+    )
 
+    trainer.fit(model, train_loader, val_loader)
+    """
     z_sample = torch.randn(1, latent_size).to(device)
     recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
-    plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')
+    plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')"""
+
+    _,data = next(iter(val_loader))
+    recon_batch, mu, logvar = model(data)
+    recon_batch = recon_batch[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
+    plt.imsave('sample_reconstruction.png', recon_batch, cmap='gray')
 
 def parse_args():
     """
