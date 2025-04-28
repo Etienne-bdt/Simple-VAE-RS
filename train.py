@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from dataset import FloodDataset, Sen2VenDataset
 from loss import loss_function
-from model import VAE_Lightning
+from model import Cond_SRVAE_Lightning, VAE_Lightning
 
 import lightning as L
 import lightning.pytorch.callbacks as clb
@@ -93,15 +93,15 @@ def init_dataloader(dataset:str):
     train_size = int(0.8 * len(ds))
     val_size = len(ds) - train_size
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
-    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=6)
-    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=6)
+    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=16, shuffle=True, num_workers=6)
+    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=16, shuffle=False, num_workers=6)
     return train_loader, val_loader
 
 def main(args):
 
     train_loader, val_loader = init_dataloader(args.dataset)
-    latent_size = 4096
-    model = VAE_Lightning(latent_size)
+    latent_size = 2000
+    model = Cond_SRVAE_Lightning(latent_size)
 
     """print("Training the model...")
     if os.path.exists('vae_model.pth'):
@@ -115,15 +115,17 @@ def main(args):
     """
 
     trainer = L.Trainer(
-    devices=1,
-    num_nodes=1,
-    accelerator="cuda",
-    max_epochs=args.epochs,
-    log_every_n_steps=50,
-    callbacks=[
-        clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
-        clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
-    ]
+        devices=1,
+        num_nodes=1,
+        accelerator="cuda",
+        max_epochs=args.epochs,
+        log_every_n_steps=50,
+        precision="16-mixed",
+        gradient_clip_val=1,
+        callbacks=[
+            clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
+            clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
+        ],
     )
 
     trainer.fit(model, train_loader, val_loader)
@@ -132,10 +134,12 @@ def main(args):
     recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
     plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')"""
 
-    _,data = next(iter(val_loader))
+    """    _,data = next(iter(val_loader))
     recon_batch, mu, logvar = model(data)
     recon_batch = recon_batch[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
     plt.imsave('sample_reconstruction.png', recon_batch, cmap='gray')
+    """
+
 
 def parse_args():
     """
