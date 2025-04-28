@@ -118,16 +118,15 @@ def main(args):
         num_nodes=1,
         accelerator="cuda",
         max_epochs=args.epochs,
-        log_every_n_steps=50,
-        precision="16-mixed",
-        gradient_clip_val=1,
+        gradient_clip_val=5,
         callbacks=[
             clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
-            clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
         ],
     )
 
     trainer.fit(model, train_loader, val_loader)
+    # Save the model
+
     """
     z_sample = torch.randn(1, latent_size).to(device)
     recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
