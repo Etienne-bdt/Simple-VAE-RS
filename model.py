@@ -158,14 +158,6 @@ class Cond_SRVAE(nn.Module):
         self.u_to_z = nn.Linear(self.latent_size, self.latent_size//2)
         self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
         self.logvar_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
-        self._initialize_weights()  # Add weight initialization
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
 
     def z_cond(self, y,u):
         # Define the encoder part of the VAE
