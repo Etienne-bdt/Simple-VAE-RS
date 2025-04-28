@@ -2,11 +2,11 @@
 
 #SBATCH --nodes=1
 #SBATCH --time=1-00:00:00
-#SBATCH --job-name=VAE
+#SBATCH --job-name=Conditionnal_VAE
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
 #SBATCH --partition=gpu
-#SBATCH --nodelist=gpu01
+#SBATCH --nodelist=gpu02
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6

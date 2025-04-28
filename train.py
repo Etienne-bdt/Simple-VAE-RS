@@ -93,8 +93,8 @@ def init_dataloader(dataset:str):
     train_size = int(0.8 * len(ds))
     val_size = len(ds) - train_size
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
-    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=16, shuffle=True, num_workers=6)
-    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=16, shuffle=False, num_workers=6)
+    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=16, shuffle=True, num_workers=6, persistent_workers=True)
+    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=16, shuffle=False, num_workers=6, persistent_workers=True)
     return train_loader, val_loader
 
 def main(args):
@@ -118,10 +118,7 @@ def main(args):
         num_nodes=1,
         accelerator="cuda",
         max_epochs=args.epochs,
-        gradient_clip_val=5,
-        callbacks=[
-            clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
-        ],
+        gradient_clip_val=1,
     )
 
     trainer.fit(model, train_loader, val_loader)
