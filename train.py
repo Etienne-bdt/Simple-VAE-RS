@@ -98,9 +98,8 @@ def init_dataloader(dataset:str):
     return train_loader, val_loader
 
 def main(args):
-
     train_loader, val_loader = init_dataloader(args.dataset)
-    latent_size = 2000
+    latent_size = 1000
     model = Cond_SRVAE_Lightning(latent_size)
 
     """print("Training the model...")

@@ -271,7 +271,7 @@ class Cond_SRVAE_Lightning(L.LightningModule):
         return optimizer
 
 if __name__ == "__main__":
-    latent_size = 4096
+    latent_size = 2048
     model = Cond_SRVAE(latent_size)
     x = torch.randn(1, 4, 256, 256)
     y = torch.randn(1, 4, 128, 128)
