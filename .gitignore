@@ -10,3 +10,5 @@ slurm_logs/
 # Project-specific directories
 ARM/
 floods/
+
+*.png

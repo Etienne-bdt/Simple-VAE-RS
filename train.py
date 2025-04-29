@@ -1,152 +1,265 @@
 import argparse
 
-import matplotlib.pyplot as plt
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
 
-from dataset import FloodDataset, Sen2VenDataset
-from loss import loss_function
-from model import VAE_Lightning
+from dataset import init_dataloader
+from loss import cond_loss
+from model import Cond_SRVAE
+from utils import normalize_image
+import matplotlib.pyplot as plt
 
-import lightning as L
-import lightning.pytorch.callbacks as clb
 
-def train(model, train_loader, val_loader, gamma, optimizer, epochs):
+def train(
+    device,
+    model,
+    train_loader,
+    val_loader,
+    gamma,
+    gamma2,
+    optimizer,
+    epochs,
+    pretrain=False,
+    bands=[2, 1, 0],
+):
     writer = SummaryWriter()  # Initialize TensorBoard writer
-    t_mse = []
-    t_kld = []
-    v_mse = []
-    v_kld = []
-    gamma_vals = []
-
+    best_loss = float("inf")  # Initialize best loss to infinity
     for epoch in range(epochs):
-        gamma_vals.append(gamma.item())
         model.train()
-        train_loss_mse = 0
-        train_loss_kld = 0
         train_loss = 0
-        for _, data in tqdm(enumerate(train_loader)):
-            _,y = data
-            data = y.to(device)
-            optimizer.zero_grad()
-            recon_batch, mu, logvar = model(data)
-            mse, kld = loss_function(recon_batch, data, mu, logvar, gamma)
-            loss = mse + kld
-            train_loss_kld += kld.item()
-            train_loss_mse += mse.item()
+        tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = (0, 0, 0, 0)
+        for _, batch in tqdm(
+            enumerate(train_loader),
+            total=len(train_loader),
+            desc=f"Training, Epoch {epoch + 1}/{epochs}",
+            unit="batch",
+        ):
+            y, x = batch
+            y, x = y.to(device), x.to(device)
+            x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(
+                x, y
+            )
+            mse_x, kld_u, mse_y, kld_z = cond_loss(
+                x_hat,
+                x,
+                y_hat,
+                y,
+                mu_u,
+                logvar_u,
+                mu_z,
+                logvar_z,
+                mu_z_uy,
+                logvar_z_uy,
+                gamma,
+                gamma2,
+            )
+            loss = mse_x + kld_u + mse_y + kld_z if not pretrain else mse_y + kld_u
+            tot_kld_u, tot_kld_z, tot_mse_x, tot_mse_y = (
+                tot_kld_u + kld_u.item(),
+                tot_kld_z + kld_z.item(),
+                tot_mse_x + mse_x.item(),
+                tot_mse_y + mse_y.item(),
+            )
             loss.backward()
             train_loss += loss.item()
             optimizer.step()
 
         # Append train losses to lists after each epoch
-        t_mse.append(train_loss_mse / len(train_loader.dataset))
-        t_kld.append(train_loss_kld / len(train_loader.dataset))
 
-        print(f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}")
+        print(
+            f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}"
+        )
+        if torch.isnan(loss):
+            raise ValueError("Loss is NaN, stopping training.")
 
-        # Log training losses to TensorBoard
-        writer.add_scalar('Loss/Train_MSE', t_mse[-1], epoch)
-        writer.add_scalar('Loss/Train_KLD', t_kld[-1], epoch)
-        writer.add_scalar('Gamma', gamma.item(), epoch)
-
-        val_loss_mse = 0
-        val_loss_kld = 0
         val_loss = 0
+        val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
         model.eval()
         with torch.no_grad():
-            for _, data in enumerate(val_loader):
-                _,y  = data
-                data = y.to(device)
-                recon_batch, mu, logvar = model(data)
-                mse, kld = loss_function(recon_batch, data, mu, logvar, gamma)
-                v_loss = mse + kld
-                val_loss_kld += kld.item()
-                val_loss_mse += mse.item()
+            for _, batch in enumerate(val_loader):
+                y, x = batch
+                y, x = y.to(device), x.to(device)
+                x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = (
+                    model(x, y)
+                )
+                v_mse_x, v_kld_u, v_mse_y, v_kld_z = cond_loss(
+                    x_hat,
+                    x,
+                    y_hat,
+                    y,
+                    mu_u,
+                    logvar_u,
+                    mu_z,
+                    logvar_z,
+                    mu_z_uy,
+                    logvar_z_uy,
+                    gamma,
+                    gamma2,
+                )
+                v_loss = v_mse_x + v_kld_u + v_mse_y + v_kld_z if not pretrain else v_mse_y + v_kld_u
+                val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (
+                    val_tot_kld_u + v_kld_u.item(),
+                    val_tot_kld_z + v_kld_z.item(),
+                    val_tot_mse_x + v_mse_x.item(),
+                    val_tot_mse_y + v_mse_y.item(),
+                )
                 val_loss += v_loss.item()
-        # Append val losses to lists after each epoch
-        v_mse.append(val_loss_mse / len(val_loader.dataset))
-        v_kld.append(val_loss_kld / len(val_loader.dataset))
 
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
-        v_mse.append(val_loss_mse / len(val_loader.dataset))
-        v_kld.append(val_loss_kld / len(val_loader.dataset))
+        if val_loss / len(val_loader.dataset) < best_loss:
+            best_loss = val_loss / len(val_loader.dataset)
+            print(
+                f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}"
+            )
+            torch.save(model.state_dict(), "best_model.pth")
 
-        print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
+        # Log reconstruction and Conditional generation
 
-        # Log validation losses to TensorBoard
-        writer.add_scalar('Loss/Val_MSE', v_mse[-1], epoch)
-        writer.add_scalar('Loss/Val_KLD', v_kld[-1], epoch)
-        writer.add_scalar('Loss/gamma', gamma_vals[-1], epoch)
+        writer.add_images(
+            "Reconstruction/LR_Original",
+            normalize_image(x.view(-1, 4, 128, 128)[:, bands, :, :]),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Reconstruction/LR",
+            normalize_image(x_hat.view(-1, 4, 128, 128)[:, bands, :, :]),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        conditional_gen = model.conditional_generation(y)
+        writer.add_images(
+            "Conditional Generation/Original",
+            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Conditional Generation/HR",
+            normalize_image(conditional_gen.view(-1, 4, 256, 256)[:, bands, :, :]),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Reconstruction/HR",
+            normalize_image(x_hat.view(-1, 4, 256, 256)[:, bands, :, :]),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        # Log to TensorBoard
+        writer.add_scalars(
+            "Loss/KLD_u",
+            {
+                "Train": tot_kld_u / len(train_loader.dataset),
+                "Validation": val_tot_kld_u / len(val_loader.dataset),
+            },
+            epoch,
+        )
+        writer.add_scalars(
+            "Loss/KLD_z",
+            {
+                "Train": tot_kld_z / len(train_loader.dataset),
+                "Validation": val_tot_kld_z / len(val_loader.dataset),
+            },
+            epoch,
+        )
+        writer.add_scalars(
+            "Loss/MSE_y",
+            {
+                "Train": tot_mse_y / len(train_loader.dataset),
+                "Validation": val_tot_mse_y / len(val_loader.dataset),
+            },
+            epoch,
+        )
+        writer.add_scalars(
+            "Loss/MSE_x",
+            {
+                "Train": tot_mse_x / len(train_loader.dataset),
+                "Validation": val_tot_mse_x / len(val_loader.dataset),
+            },
+            epoch,
+        )
+        writer.add_scalars(
+            "Loss/Total",
+            {
+                "Train": train_loss / len(train_loader.dataset),
+                "Validation": v_loss / len(val_loader.dataset),
+            },
+            epoch,
+        )
+        writer.add_scalars(
+            "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
+        )
     writer.close()  # Close the TensorBoard writer
-    return t_mse, t_kld, v_mse, v_kld, gamma_vals
+    return
 
-def init_dataloader(dataset:str):
-    if dataset == "Sen2Venus" or dataset == "sen2venus" or dataset == "s2v":
-        ds = Sen2VenDataset()
 
-    elif dataset == "Floods" or dataset == "floods":
-        ds = FloodDataset(patch_size=256)
-    else:
-        raise ValueError(f"Unknown dataset: {dataset}")
-    train_size = int(0.8 * len(ds))
-    val_size = len(ds) - train_size
-    train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
-    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=6)
-    val_loader = torch.utils.data.DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=6)
-    return train_loader, val_loader
 
 def main(args):
-
-    train_loader, val_loader = init_dataloader(args.dataset)
-    latent_size = 4096
-    model = VAE_Lightning(latent_size)
-
-    """print("Training the model...")
-    if os.path.exists('vae_model.pth'):
-        model.load_state_dict(torch.load('vae_model.pth'))
-        model.eval()
-        print("Model loaded from file.")           
-    else:
-        train(model, train_loader, val_loader, gamma, optimizer, epochs=args.epochs)
-        # Save the model
-        torch.save(model.state_dict(), 'vae_model.pth')
     """
+    args : arguments from the command line
+    args.epochs : number of epochs to train the model
+    args.dataset : dataset to use for training
+    """
+    train_loader, val_loader = init_dataloader(args.dataset)
+    latent_size = 3500
+    model = Cond_SRVAE(latent_size)
 
-    trainer = L.Trainer(
-    devices=1,
-    num_nodes=1,
-    accelerator="cuda",
-    max_epochs=args.epochs,
-    log_every_n_steps=50,
-    callbacks=[
-        clb.EarlyStopping(monitor="val_loss", patience=5, verbose=True),
-        clb.ModelCheckpoint(monitor="val_loss", mode="min", filename="best_model"),
-    ]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    gamma = torch.nn.Parameter(torch.tensor(1., device=device))
+    gamma2 = torch.nn.Parameter(torch.tensor(1., device=device))
+    optimizer.add_param_group({"params": [gamma, gamma2]})
+
+    model.freeze_x()
+    gamma.requires_grad = False
+    train(
+        device,
+        model,
+        train_loader,
+        val_loader,
+        gamma,
+        gamma2,
+        optimizer,
+        epochs=args.pre_epochs,
+        pretrain = True
     )
 
-    trainer.fit(model, train_loader, val_loader)
-    """
-    z_sample = torch.randn(1, latent_size).to(device)
-    recon_sample = model.decode(z_sample)[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
-    plt.imsave('sample_reconstruction.png', recon_sample, cmap='gray')"""
-
-    _,data = next(iter(val_loader))
-    recon_batch, mu, logvar = model(data)
-    recon_batch = recon_batch[0,[3,2,1],:,:].cpu().detach().permute(1,2,0).numpy()
-    plt.imsave('sample_reconstruction.png', recon_batch, cmap='gray')
 
 def parse_args():
     """
     Parse command line arguments. Notably to set the number of epochs or change the dataset.
     """
     parser = argparse.ArgumentParser(description="Train a VAE model.")
-    parser.add_argument("--epochs", type=int, default=50, help="Number of epochs to train the model.")
-    parser.add_argument("--dataset", type=str, default="s2v", help="Type of the dataset")
+    parser.add_argument(
+        "--pre_epochs",
+        type=int,
+        default=50,
+        help="Number of epochs to pre-train the low resolution model.",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=200, help="Number of epochs to train the model."
+    )
+    parser.add_argument(
+        "--dataset", type=str, default="s2v", help="Type of the dataset"
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="If set, the model will be tested instead of trained.",
+    )
 
     return parser.parse_args()
 
+
 if __name__ == "__main__":
-    args = parse_args()
-    main(args)
+    arguments = parse_args()
+    main(args=arguments)
