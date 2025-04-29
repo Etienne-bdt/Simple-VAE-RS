@@ -105,7 +105,7 @@ class VAE_Lightning(L.LightningModule):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
         optimizer.add_param_group({'params': self.gamma})
         return optimizer
-    
+   
 class Cond_SRVAE(nn.Module):
     def __init__(self, latent_size):
         super(Cond_SRVAE, self).__init__()
@@ -263,15 +263,15 @@ class Cond_SRVAE_Lightning(L.LightningModule):
         return optimizer
 
 if __name__ == "__main__":
-    latent_size = 2048
-    model = Cond_SRVAE(latent_size)
+    LATENT_SIZE = 2048
+    model = Cond_SRVAE(LATENT_SIZE)
     x = torch.randn(1, 4, 256, 256)
     y = torch.randn(1, 4, 128, 128)
     x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x,y)
-    
+
     assert x_hat.shape == x.shape
     assert y_hat.shape == y.shape
     for i,var in enumerate([mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy]):
         print(f"Testing {i}")
-        assert var.shape == (1, latent_size)
+        assert var.shape == (1, LATENT_SIZE)
     print("All size tests passed!")
