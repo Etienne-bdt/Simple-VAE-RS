@@ -7,6 +7,7 @@ from tqdm import tqdm
 from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
+from utils import normalize_image
 
 
 def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epochs):
@@ -104,13 +105,13 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         # Log reconstruction and Conditional generation
         writer.add_images(
             "Reconstruction/HR",
-            x_hat.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :],
+            normalize_image(x_hat.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
         writer.add_images(
             "Reconstruction/LR",
-            y_hat.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :],
+            normalize_image(x_hat.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -118,14 +119,14 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         conditional_gen = model.conditional_generation(y)
         writer.add_images(
             "Conditional Generation/Original",
-            y.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :],
+            normalize_image(y.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR",
-            conditional_gen.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :],
+            normalize_image(conditional_gen.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -193,6 +194,7 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     gamma = torch.tensor(0.5, requires_grad=True).to(device)
     gamma2 = torch.tensor(0.5, requires_grad=True).to(device)
+    optimizer.add_param_group({"params": [gamma, gamma2]})
 
     train(
         device,
