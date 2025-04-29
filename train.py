@@ -15,6 +15,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
     for epoch in range(epochs):
         model.train()
         train_loss = 0
+        tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = 0, 0, 0, 0
         for _, batch in tqdm(
             enumerate(train_loader),
             total=len(train_loader),
@@ -42,6 +43,12 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
                 gamma2,
             )
             loss = mse_x + kld_u + mse_y + kld_z
+            tot_kld_u, tot_kld_z, tot_mse_x, tot_mse_y = (
+                tot_kld_u + kld_u.item(),
+                tot_kld_z + kld_z.item(),
+                tot_mse_x + mse_x.item(),
+                tot_mse_y + mse_y.item(),
+            )
             loss.backward()
             train_loss += loss.item()
             optimizer.step()
@@ -53,6 +60,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         )
 
         val_loss = 0
+        val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
         model.eval()
         with torch.no_grad():
             for _, batch in enumerate(val_loader):
@@ -76,6 +84,12 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
                     gamma2,
                 )
                 v_loss = v_mse_x + v_kld_u + v_mse_y + v_kld_z
+                val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (
+                    val_tot_kld_u + v_kld_u.item(),
+                    val_tot_kld_z + v_kld_z.item(),
+                    val_tot_mse_x + v_mse_x.item(),
+                    val_tot_mse_y + v_mse_y.item(),
+                )
                 val_loss += v_loss.item()
 
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
@@ -87,36 +101,65 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             )
             torch.save(model.state_dict(), "best_model.pth")
 
-        # Log validation losses to TensorBoard
+        # Log reconstruction and Conditional generation
+        writer.add_images(
+            "Reconstruction/HR",
+            x_hat.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+        writer.add_images(
+            "Reconstruction/LR",
+            y_hat.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        conditional_gen = model.conditional_generation(y)
+        writer.add_images(
+            "Conditional Generation/Original",
+            y.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Conditional Generation/HR",
+            conditional_gen.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        # Log to TensorBoard
         writer.add_scalars(
             "Loss/KLD_u",
             {
-                "Train": kld_u.item() / len(val_loader.dataset),
-                "Validation": v_kld_u.item() / len(val_loader.dataset),
+                "Train": tot_kld_u / len(val_loader.dataset),
+                "Validation": val_tot_kld_u / len(val_loader.dataset),
             },
             epoch,
         )
         writer.add_scalars(
             "Loss/KLD_z",
             {
-                "Train": kld_z.item() / len(val_loader.dataset),
-                "Validation": v_kld_z.item() / len(val_loader.dataset),
+                "Train": tot_kld_z / len(val_loader.dataset),
+                "Validation": val_tot_kld_z / len(val_loader.dataset),
             },
             epoch,
         )
         writer.add_scalars(
             "Loss/MSE_y",
             {
-                "Train": mse_y.item() / len(val_loader.dataset),
-                "Validation": v_mse_y.item() / len(val_loader.dataset),
+                "Train": tot_mse_y / len(val_loader.dataset),
+                "Validation": val_tot_mse_y / len(val_loader.dataset),
             },
             epoch,
         )
         writer.add_scalars(
             "Loss/MSE_x",
             {
-                "Train": mse_x.item() / len(val_loader.dataset),
-                "Validation": v_mse_x.item() / len(val_loader.dataset),
+                "Train": tot_mse_x / len(val_loader.dataset),
+                "Validation": val_tot_mse_x / len(val_loader.dataset),
             },
             epoch,
         )
