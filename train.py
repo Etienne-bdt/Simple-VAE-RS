@@ -88,7 +88,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             torch.save(model.state_dict(), "best_model.pth")
 
         # Log validation losses to TensorBoard
-        writer.add_scalar(
+        writer.add_scalars(
             "Loss/KLD_u",
             {
                 "Train": kld_u.item() / len(val_loader.dataset),
@@ -96,7 +96,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             },
             epoch,
         )
-        writer.add_scalar(
+        writer.add_scalars(
             "Loss/KLD_z",
             {
                 "Train": kld_z.item() / len(val_loader.dataset),
@@ -104,7 +104,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             },
             epoch,
         )
-        writer.add_scalar(
+        writer.add_scalars(
             "Loss/MSE_y",
             {
                 "Train": mse_y.item() / len(val_loader.dataset),
@@ -112,7 +112,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             },
             epoch,
         )
-        writer.add_scalar(
+        writer.add_scalars(
             "Loss/MSE_x",
             {
                 "Train": mse_x.item() / len(val_loader.dataset),
@@ -120,7 +120,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             },
             epoch,
         )
-        writer.add_scalar(
+        writer.add_scalars(
             "Loss/Total",
             {
                 "Train": loss / len(val_loader.dataset),
@@ -128,7 +128,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             },
             epoch,
         )
-        writer.add_scalar(
+        writer.add_scalars(
             "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
         )
     writer.close()  # Close the TensorBoard writer

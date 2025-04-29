@@ -100,6 +100,10 @@ class Sen2VenDataset(Dataset):
             self.df = self.df.select(["b2b3b4b8_10m", "b2b3b4b8_05m"])
             self.p0 = "b2b3b4b8_10m"
             self.p1 = "b2b3b4b8_05m"
+        
+        assert patch_size <= 256, "Patch size must be less than or equal to 256"
+        if patch_size < 256 and patch_size > 0:
+            #TODO: implement random cropping
 
     def __len__(self):
         return len(self.df)
