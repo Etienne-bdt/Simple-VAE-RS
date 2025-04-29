@@ -18,7 +18,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         for _, batch in tqdm(
             enumerate(train_loader),
             total=len(train_loader),
-            desc="Training",
+            desc=f"Training, Epoch {epoch + 1}/{epochs}",
             unit="batch",
         ):
             y, x = batch
