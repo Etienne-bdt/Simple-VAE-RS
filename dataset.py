@@ -5,6 +5,7 @@ import polars as pl
 import rasterio
 import torch
 from torch.utils.data import Dataset
+from utils import normalize_image
 
 
 def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
@@ -124,7 +125,7 @@ class Sen2VenDataset(Dataset):
             img2 = src2.read()  # Read all bands
 
         # Normalize the images
-        img1 = torch.tensor(img1, dtype=torch.float32) / 255.0
-        img2 = torch.tensor(img2, dtype=torch.float32) / 255.0
+        img1 = normalize_image(torch.tensor(img1, dtype=torch.float32))
+        img2 = normalize_image(torch.tensor(img2, dtype=torch.float32))
 
         return img1, img2

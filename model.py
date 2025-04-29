@@ -159,6 +159,16 @@ class Cond_SRVAE(nn.Module):
         self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
         self.logvar_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
 
+        self._initialize_weights()  # Add weight initialization
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+
     def z_cond(self, y,u):
         # Define the encoder part of the VAE
         y = self.y_to_z(y)
@@ -232,6 +242,45 @@ class Cond_SRVAE(nn.Module):
 
         x_hat = self.decode_x(z)
         return x_hat
+
+    def freeze_x(self):
+        for param in self.encoder2.parameters():
+            param.requires_grad = False
+        for param in self.fc_mu_2.parameters():
+            param.requires_grad = False
+        for param in self.fc_logvar_2.parameters():
+            param.requires_grad = False
+        for param in self.fc_decode_x.parameters():
+            param.requires_grad = False
+        for param in self.decoder_2.parameters():
+            param.requires_grad = False
+        for param in self.u_to_z.parameters():
+            param.requires_grad = False
+        for param in self.mu_u_y_to_z.parameters():
+            param.requires_grad = False
+        for param in self.logvar_u_y_to_z.parameters():
+            param.requires_grad = False
+        for param in self.y_to_z.parameters():
+            param.requires_grad = False
+    def unfreeze_x(self):
+        for param in self.encoder2.parameters():
+            param.requires_grad = True
+        for param in self.fc_mu_2.parameters():
+            param.requires_grad = True
+        for param in self.fc_logvar_2.parameters():
+            param.requires_grad = True
+        for param in self.fc_decode_x.parameters():
+            param.requires_grad = True
+        for param in self.decoder_2.parameters():
+            param.requires_grad = True
+        for param in self.u_to_z.parameters():
+            param.requires_grad = True
+        for param in self.mu_u_y_to_z.parameters():
+            param.requires_grad = True
+        for param in self.logvar_u_y_to_z.parameters():
+            param.requires_grad = True
+        for param in self.y_to_z.parameters():
+            param.requires_grad = True
 
 class Cond_SRVAE_Lightning(L.LightningModule):
     def __init__(self, latent_size):

@@ -8,15 +8,27 @@ from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
 from utils import normalize_image
+import matplotlib.pyplot as plt
 
 
-def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epochs):
+def train(
+    device,
+    model,
+    train_loader,
+    val_loader,
+    gamma,
+    gamma2,
+    optimizer,
+    epochs,
+    pretrain=False,
+    bands=[2, 1, 0],
+):
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
     for epoch in range(epochs):
         model.train()
         train_loss = 0
-        tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = 0, 0, 0, 0
+        tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = (0, 0, 0, 0)
         for _, batch in tqdm(
             enumerate(train_loader),
             total=len(train_loader),
@@ -25,7 +37,6 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         ):
             y, x = batch
             y, x = y.to(device), x.to(device)
-            optimizer.zero_grad()
             x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(
                 x, y
             )
@@ -43,7 +54,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
                 gamma,
                 gamma2,
             )
-            loss = mse_x + kld_u + mse_y + kld_z
+            loss = mse_x + kld_u + mse_y + kld_z if not pretrain else mse_y + kld_u
             tot_kld_u, tot_kld_z, tot_mse_x, tot_mse_y = (
                 tot_kld_u + kld_u.item(),
                 tot_kld_z + kld_z.item(),
@@ -59,6 +70,8 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         print(
             f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}"
         )
+        if torch.isnan(loss):
+            raise ValueError("Loss is NaN, stopping training.")
 
         val_loss = 0
         val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
@@ -84,7 +97,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
                     gamma,
                     gamma2,
                 )
-                v_loss = v_mse_x + v_kld_u + v_mse_y + v_kld_z
+                v_loss = v_mse_x + v_kld_u + v_mse_y + v_kld_z if not pretrain else v_mse_y + v_kld_u
                 val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (
                     val_tot_kld_u + v_kld_u.item(),
                     val_tot_kld_z + v_kld_z.item(),
@@ -103,15 +116,17 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
             torch.save(model.state_dict(), "best_model.pth")
 
         # Log reconstruction and Conditional generation
+
         writer.add_images(
-            "Reconstruction/HR",
-            normalize_image(x_hat.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :]),
+            "Reconstruction/LR_Original",
+            normalize_image(x.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
+
         writer.add_images(
             "Reconstruction/LR",
-            normalize_image(x_hat.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :]),
+            normalize_image(x_hat.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -119,14 +134,21 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         conditional_gen = model.conditional_generation(y)
         writer.add_images(
             "Conditional Generation/Original",
-            normalize_image(y.view(-1, 4, 128, 128)[:, [3, 2, 1], :, :]),
+            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR",
-            normalize_image(conditional_gen.view(-1, 4, 256, 256)[:, [3, 2, 1], :, :]),
+            normalize_image(conditional_gen.view(-1, 4, 256, 256)[:, bands, :, :]),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Reconstruction/HR",
+            normalize_image(x_hat.view(-1, 4, 256, 256)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -135,7 +157,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         writer.add_scalars(
             "Loss/KLD_u",
             {
-                "Train": tot_kld_u / len(val_loader.dataset),
+                "Train": tot_kld_u / len(train_loader.dataset),
                 "Validation": val_tot_kld_u / len(val_loader.dataset),
             },
             epoch,
@@ -143,7 +165,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         writer.add_scalars(
             "Loss/KLD_z",
             {
-                "Train": tot_kld_z / len(val_loader.dataset),
+                "Train": tot_kld_z / len(train_loader.dataset),
                 "Validation": val_tot_kld_z / len(val_loader.dataset),
             },
             epoch,
@@ -151,7 +173,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         writer.add_scalars(
             "Loss/MSE_y",
             {
-                "Train": tot_mse_y / len(val_loader.dataset),
+                "Train": tot_mse_y / len(train_loader.dataset),
                 "Validation": val_tot_mse_y / len(val_loader.dataset),
             },
             epoch,
@@ -159,7 +181,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         writer.add_scalars(
             "Loss/MSE_x",
             {
-                "Train": tot_mse_x / len(val_loader.dataset),
+                "Train": tot_mse_x / len(train_loader.dataset),
                 "Validation": val_tot_mse_x / len(val_loader.dataset),
             },
             epoch,
@@ -167,7 +189,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
         writer.add_scalars(
             "Loss/Total",
             {
-                "Train": loss / len(val_loader.dataset),
+                "Train": train_loss / len(train_loader.dataset),
                 "Validation": v_loss / len(val_loader.dataset),
             },
             epoch,
@@ -179,6 +201,7 @@ def train(device, model, train_loader, val_loader, gamma, gamma2, optimizer, epo
     return
 
 
+
 def main(args):
     """
     args : arguments from the command line
@@ -186,16 +209,18 @@ def main(args):
     args.dataset : dataset to use for training
     """
     train_loader, val_loader = init_dataloader(args.dataset)
-    latent_size = 2000
+    latent_size = 3500
     model = Cond_SRVAE(latent_size)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    gamma = torch.tensor(0.5, requires_grad=True).to(device)
-    gamma2 = torch.tensor(0.5, requires_grad=True).to(device)
+    gamma = torch.nn.Parameter(torch.tensor(1., device=device))
+    gamma2 = torch.nn.Parameter(torch.tensor(1., device=device))
     optimizer.add_param_group({"params": [gamma, gamma2]})
 
+    model.freeze_x()
+    gamma.requires_grad = False
     train(
         device,
         model,
@@ -204,7 +229,8 @@ def main(args):
         gamma,
         gamma2,
         optimizer,
-        epochs=args.epochs,
+        epochs=args.pre_epochs,
+        pretrain = True
     )
 
 
@@ -214,10 +240,21 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description="Train a VAE model.")
     parser.add_argument(
-        "--epochs", type=int, default=50, help="Number of epochs to train the model."
+        "--pre_epochs",
+        type=int,
+        default=50,
+        help="Number of epochs to pre-train the low resolution model.",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=200, help="Number of epochs to train the model."
     )
     parser.add_argument(
         "--dataset", type=str, default="s2v", help="Type of the dataset"
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="If set, the model will be tested instead of trained.",
     )
 
     return parser.parse_args()

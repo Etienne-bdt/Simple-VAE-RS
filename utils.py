@@ -8,7 +8,15 @@ def normalize_image(image: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Normalized image tensor.
     """
-    min_val = image.min()
-    max_val = image.max()
-    normalized_image = (image - min_val) / (max_val - min_val + 1e-5)
+    if image.ndim == 3:
+        # If the image is 3D (C, H, W), add a batch dimension
+        min_val = image.amin(dim=(1, 2), keepdim=True)
+        max_val = image.amax(dim=(1, 2), keepdim=True)
+        normalized_image = (image - min_val) / (max_val - min_val + 1e-5)
+    elif image.ndim == 4:
+        min_val = image.amin(dim=(2, 3), keepdim=True)
+        max_val = image.amax(dim=(2, 3), keepdim=True)
+        normalized_image = (image - min_val) / (max_val - min_val + 1e-5)
+    else:
+        raise ValueError("Input image must be 3D or 4D tensor.")
     return normalized_image
