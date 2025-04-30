@@ -143,10 +143,8 @@ if __name__ == "__main__":
         plt.imsave(
             f"img1_{i}.png",
             img1[[2,1,0],:,:].permute(1, 2, 0).numpy(),
-            cmap="gray",
         )
         plt.imsave(
             f"img2_{i}.png",
             img2[[2,1,0],:,:].permute(1, 2, 0).numpy(),
-            cmap="gray",
         )
