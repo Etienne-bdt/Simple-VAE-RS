@@ -317,4 +317,8 @@ def parse_args():
 
 if __name__ == "__main__":
     arguments = parse_args()
+    print("==========================")
+    print("Initializing training with the following arguments:")
+    print(arguments)
+    print("==========================")
     main(args=arguments)

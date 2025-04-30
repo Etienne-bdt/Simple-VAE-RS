@@ -140,9 +140,9 @@ class Cond_SRVAE(nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
             nn.ReLU(),
         )
-        self.fc_mu_1 = nn.Linear(128 * self.patch_size, self.latent_size)
-        self.fc_logvar_1 = nn.Linear(128 * self.patch_size, self.latent_size)
-        self.fc_decode_y = nn.Linear(self.latent_size, 128 * self.patch_size)
+        self.fc_mu_1 = nn.Linear(patch_size**2//2, self.latent_size)
+        self.fc_logvar_1 = nn.Linear(patch_size**2//2, self.latent_size)
+        self.fc_decode_y = nn.Linear(self.latent_size, patch_size**2//2)
         self.decoder_1 = nn.Sequential(
             nn.ConvTranspose2d(
                 128, 64, kernel_size=3, stride=2, padding=1
@@ -166,9 +166,9 @@ class Cond_SRVAE(nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
             nn.ReLU(),
         )
-        self.fc_mu_2 = nn.Linear(128 * self.patch_size * 4, self.latent_size)
-        self.fc_logvar_2 = nn.Linear(128 * self.patch_size * 4, self.latent_size)
-        self.fc_decode_x = nn.Linear(self.latent_size, 128 * self.patch_size * 4)
+        self.fc_mu_2 = nn.Linear(2*patch_size**2, self.latent_size)
+        self.fc_logvar_2 = nn.Linear(2*patch_size**2, self.latent_size)
+        self.fc_decode_x = nn.Linear(self.latent_size,2*patch_size**2)
         self.decoder_2 = nn.Sequential(
             nn.ConvTranspose2d(
                 128, 64, kernel_size=3, stride=2, padding=1
@@ -192,7 +192,7 @@ class Cond_SRVAE(nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(128 * self.patch_size, self.latent_size // 2),
+            nn.Linear(patch_size**2//2, self.latent_size // 2),
         )
         self.u_to_z = nn.Linear(self.latent_size, self.latent_size // 2)
         self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
@@ -237,13 +237,13 @@ class Cond_SRVAE(nn.Module):
 
     def decode_y(self, u):
         u = self.fc_decode_y(u)
-        u = u.view(u.size(0), 128, self.sqrt_patch, self.sqrt_patch)
+        u = u.view(u.size(0), 128, self.patch_size//16, self.patch_size//16)
         y = self.decoder_1(u)
         return y
 
     def decode_x(self, z):
         z = self.fc_decode_x(z)
-        z = z.view(z.size(0), 128, self.sqrt_patch * 2, self.sqrt_patch * 2)
+        z = z.view(z.size(0), 128, self.patch_size//8, self.patch_size//8)
         x = self.decoder_2(z)
         return x
 
@@ -371,11 +371,16 @@ class Cond_SRVAE_Lightning(L.LightningModule):
 
 
 if __name__ == "__main__":
-    LATENT_SIZE = 2048
-    model = Cond_SRVAE(LATENT_SIZE)
-    x = torch.randn(1, 4, 256, 256)
-    y = torch.randn(1, 4, 128, 128)
+    LATENT_SIZE = 128
+    PATCH_SIZE = 256
+    print("Testing model size")
+    model = Cond_SRVAE(LATENT_SIZE, PATCH_SIZE)
+    x = torch.randn(1, 4, PATCH_SIZE, PATCH_SIZE)
+    y = torch.randn(1, 4, PATCH_SIZE//2, PATCH_SIZE//2)
     x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x, y)
+
+    print(x_hat.shape)
+    print(y_hat.shape)
 
     assert x_hat.shape == x.shape
     assert y_hat.shape == y.shape
