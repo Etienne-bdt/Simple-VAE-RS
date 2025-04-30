@@ -23,18 +23,33 @@ def train(
     pretrain=False,
     bands=[2, 1, 0],
 ):
+    """
+        Training script for the Conditional SRVAE model.
+        Args:
+            device: The device to use for training (CPU or GPU).
+            model: The Conditional SRVAE model.
+            train_loader: DataLoader for the training set.
+            val_loader: DataLoader for the validation set.
+            gamma: The gamma parameter for the loss function.
+            gamma2: The gamma2 parameter for the loss function.
+            optimizer: The optimizer for training.
+            epochs: Number of epochs to (pre)train the model.
+            pretrain: If True, pretrain the model on low resolution data.
+            bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
+    """
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
-    for epoch in range(epochs):
+    for epoch in range(1, epochs + 1):
         model.train()
         train_loss = 0
         tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = (0, 0, 0, 0)
         for _, batch in tqdm(
             enumerate(train_loader),
             total=len(train_loader),
-            desc=f"Training, Epoch {epoch + 1}/{epochs}",
+            desc=f"Training, Epoch {epoch}/{epochs}",
             unit="batch",
         ):
+            optimizer.zero_grad()
             y, x = batch
             y, x = y.to(device), x.to(device)
             x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(
@@ -54,7 +69,9 @@ def train(
                 gamma,
                 gamma2,
             )
-            loss = mse_x + kld_u + mse_y + kld_z if not pretrain else mse_y + kld_u
+            loss = (
+                mse_x + kld_u + mse_y + kld_z if not pretrain else mse_y + kld_u + mse_x
+            )
             tot_kld_u, tot_kld_z, tot_mse_x, tot_mse_y = (
                 tot_kld_u + kld_u.item(),
                 tot_kld_z + kld_z.item(),
@@ -63,6 +80,7 @@ def train(
             )
             loss.backward()
             train_loss += loss.item()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
         # Append train losses to lists after each epoch
@@ -70,8 +88,6 @@ def train(
         print(
             f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}"
         )
-        if torch.isnan(loss):
-            raise ValueError("Loss is NaN, stopping training.")
 
         val_loss = 0
         val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
@@ -97,7 +113,11 @@ def train(
                     gamma,
                     gamma2,
                 )
-                v_loss = v_mse_x + v_kld_u + v_mse_y + v_kld_z if not pretrain else v_mse_y + v_kld_u
+                v_loss = (
+                    v_mse_x + v_kld_u + v_mse_y + v_kld_z
+                    if not pretrain
+                    else v_mse_y + v_kld_u + v_mse_x
+                )
                 val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (
                     val_tot_kld_u + v_kld_u.item(),
                     val_tot_kld_z + v_kld_z.item(),
@@ -119,14 +139,14 @@ def train(
 
         writer.add_images(
             "Reconstruction/LR_Original",
-            normalize_image(x.view(-1, 4, 128, 128)[:, bands, :, :]),
+            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/LR",
-            normalize_image(x_hat.view(-1, 4, 128, 128)[:, bands, :, :]),
+            normalize_image(y_hat.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -190,16 +210,20 @@ def train(
             "Loss/Total",
             {
                 "Train": train_loss / len(train_loader.dataset),
-                "Validation": v_loss / len(val_loader.dataset),
+                "Validation": val_loss / len(val_loader.dataset),
             },
             epoch,
         )
         writer.add_scalars(
             "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
         )
+
+    if torch.isnan(loss):
+        raise ValueError("Loss is NaN, stopping training.")
+
+
     writer.close()  # Close the TensorBoard writer
     return
-
 
 
 def main(args):
@@ -212,15 +236,18 @@ def main(args):
     latent_size = 3500
     model = Cond_SRVAE(latent_size)
 
+    # Sanity Check dataloader
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    gamma = torch.nn.Parameter(torch.tensor(1., device=device))
-    gamma2 = torch.nn.Parameter(torch.tensor(1., device=device))
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+    gamma = torch.tensor([0.25]).to(device)
+    gamma.requires_grad = True
+    gamma2 = torch.tensor([0.25]).to(device)
+    gamma2.requires_grad = True
     optimizer.add_param_group({"params": [gamma, gamma2]})
 
-    model.freeze_x()
-    gamma.requires_grad = False
+    model.freeze_cond()
+
     train(
         device,
         model,
@@ -230,7 +257,21 @@ def main(args):
         gamma2,
         optimizer,
         epochs=args.pre_epochs,
-        pretrain = True
+        pretrain=True,
+    )
+
+    model.unfreeze_cond()
+
+    train(
+        device,
+        model,
+        train_loader,
+        val_loader,
+        gamma,
+        gamma2,
+        optimizer,
+        epochs=args.epochs,
+        pretrain=False,
     )
 
 
@@ -242,7 +283,7 @@ def parse_args():
     parser.add_argument(
         "--pre_epochs",
         type=int,
-        default=50,
+        default=5,
         help="Number of epochs to pre-train the low resolution model.",
     )
     parser.add_argument(
