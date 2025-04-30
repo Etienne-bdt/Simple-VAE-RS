@@ -1,10 +1,12 @@
 import os
 
+import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import rasterio
 import torch
 from torch.utils.data import Dataset
+
 from utils import normalize_image
 
 
@@ -129,3 +131,22 @@ class Sen2VenDataset(Dataset):
         img2 = normalize_image(torch.tensor(img2, dtype=torch.float32))
 
         return img1, img2
+
+
+if __name__ == "__main__":
+    # Example usage
+    ds = Sen2VenDataset()
+    print(f"Number of samples: {len(ds)}")
+    for i in range(5):
+        img1, img2 = ds[i]
+        print(f"Image 1 shape: {img1.shape}, Image 2 shape: {img2.shape}")
+        plt.imsave(
+            f"img1_{i}.png",
+            img1[[2,1,0],:,:].permute(1, 2, 0).numpy(),
+            cmap="gray",
+        )
+        plt.imsave(
+            f"img2_{i}.png",
+            img2[[2,1,0],:,:].permute(1, 2, 0).numpy(),
+            cmap="gray",
+        )
