@@ -99,15 +99,24 @@ class Sen2VenDataset(Dataset):
         self.dataset = os.path.join(os.getcwd(), dataset)
         csv_path = os.path.join(self.dataset, "index.csv")
         self.df = pl.read_csv(csv_path, has_header=True, separator="	")
+        self.patch_size = patch_size
         if bands == "visu":
             self.df = self.df.select(["b2b3b4b8_10m", "b2b3b4b8_05m"])
             self.p0 = "b2b3b4b8_10m"
             self.p1 = "b2b3b4b8_05m"
+        else:
+            raise NotImplementedError(
+                "Only 'visu' bands are implemented. Please choose 'visu'."
+            )
 
         assert patch_size <= 256, "Patch size must be less than or equal to 256"
-        if patch_size < 256 and patch_size > 0:
+        if patch_size < 256 and patch_size > 0 and patch_size % 2 == 0:
             # TODO: implement random cropping
-            pass
+            self.transform = True
+        elif patch_size == 256:
+            self.transform = False
+        else:
+            raise ValueError("Patch size must be a positive even number")
 
     def __len__(self):
         return len(self.df)
@@ -126,25 +135,57 @@ class Sen2VenDataset(Dataset):
         with rasterio.open(p2) as src2:
             img2 = src2.read()  # Read all bands
 
-        # Normalize the images
-        img1 = normalize_image(torch.tensor(img1, dtype=torch.float32))
-        img2 = normalize_image(torch.tensor(img2, dtype=torch.float32))
+        img1 = torch.tensor(img1, dtype=torch.float32)
+        img2 = torch.tensor(img2, dtype=torch.float32)
 
+        if self.transform:
+            img1, img2 = self.sr_randomCrop(img1, img2)
+
+        # Normalize the images
+        img1 = normalize_image(img1)
+        img2 = normalize_image(img2)
+
+        return img1, img2
+
+    def sr_randomCrop(self, img1, img2):
+        """
+        Randomly crop the images to the specified patch size. Images will share the same portion of the image, the first image will be cropped to half the patch size.
+        The second image will be cropped to the full patch size.
+        Args:
+            img1 (torch.Tensor): The first image tensor.
+            img2 (torch.Tensor): The second image tensor.
+        Returns:
+            img1 (torch.Tensor): The cropped first image tensor.
+            img2 (torch.Tensor): The cropped second image tensor.
+        """
+
+        # Randomly crop the images to the specified patch size
+        _, h, w = img1.shape
+        top = np.random.randint(0, h - self.patch_size // 2)
+        left = np.random.randint(0, w - self.patch_size // 2)
+        img1 = img1[
+            :, top : top + self.patch_size // 2, left : left + self.patch_size // 2
+        ]
+        img2 = img2[
+            :,
+            top * 2 : top * 2 + self.patch_size,
+            left * 2 : left * 2 + self.patch_size,
+        ]
         return img1, img2
 
 
 if __name__ == "__main__":
     # Example usage
-    ds = Sen2VenDataset()
+    ds = Sen2VenDataset(patch_size=64)
     print(f"Number of samples: {len(ds)}")
     for i in range(5):
         img1, img2 = ds[i]
         print(f"Image 1 shape: {img1.shape}, Image 2 shape: {img2.shape}")
         plt.imsave(
             f"img1_{i}.png",
-            img1[[2,1,0],:,:].permute(1, 2, 0).numpy(),
+            img1[[2, 1, 0], :, :].permute(1, 2, 0).numpy(),
         )
         plt.imsave(
             f"img2_{i}.png",
-            img2[[2,1,0],:,:].permute(1, 2, 0).numpy(),
+            img2[[2, 1, 0], :, :].permute(1, 2, 0).numpy(),
         )

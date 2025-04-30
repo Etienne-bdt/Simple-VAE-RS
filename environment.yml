@@ -11,6 +11,5 @@ dependencies:
   - pip
   - pip:
       - torch
-      - lightning
       - tensorboard
       - standard-imghdr
