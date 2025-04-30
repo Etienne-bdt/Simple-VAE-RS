@@ -113,7 +113,8 @@ class Sen2VenDataset(Dataset):
         if patch_size < 256 and patch_size > 0 and patch_size % 2 == 0:
             # TODO: implement random cropping
             self.transform = True
-
+        elif patch_size == 256:
+            self.transform = False
         else:
             raise ValueError("Patch size must be a positive even number")
 
