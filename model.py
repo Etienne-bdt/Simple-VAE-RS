@@ -15,18 +15,26 @@ class VAE(nn.Module):
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.ReLU())
-        self.fc_mu = nn.Linear(128 * 8 * 8 *16, self.latent_size)
+            nn.ReLU(),
+        )
+        self.fc_mu = nn.Linear(128 * 8 * 8 * 16, self.latent_size)
         self.fc_logvar = nn.Linear(128 * 8 * 8 * 16, self.latent_size)
-        self.fc_decode = nn.Linear(self.latent_size, 128 * 8 * 8*16)
+        self.fc_decode = nn.Linear(self.latent_size, 128 * 8 * 8 * 16)
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1),  # 128 input channels
+            nn.ConvTranspose2d(
+                128, 64, kernel_size=3, stride=2, padding=1
+            ),  # 128 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # 64 input channels
+            nn.ConvTranspose2d(
+                64, 32, kernel_size=4, stride=2, padding=1
+            ),  # 64 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 4, kernel_size=8, stride=2, padding=1),  # 32 input channels
-            nn.Sigmoid())
+            nn.ConvTranspose2d(
+                32, 4, kernel_size=8, stride=2, padding=1
+            ),  # 32 input channels
+            nn.Sigmoid(),
+        )
         # 4 output channels (same as input)
         self._initialize_weights()  # Add weight initialization
 
@@ -53,7 +61,7 @@ class VAE(nn.Module):
 
     def decode(self, z):
         z = self.fc_decode(z)
-        z = z.view(z.size(0), 128, 8*4, 8*4)
+        z = z.view(z.size(0), 128, 8 * 4, 8 * 4)
         x = self.decoder(z)
         return x
 
@@ -63,21 +71,25 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
+
 class VAE_Lightning(L.LightningModule):
     def __init__(self, latent_size):
         super(VAE_Lightning, self).__init__()
         self.model = VAE(latent_size)
         self.gamma = torch.nn.Parameter(torch.ones(1), requires_grad=True)
 
-
     def training_step(self, batch, batch_idx):
         _, data = batch
         recon_batch, mu, logvar = self.model(data)
         mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
         loss = mse + kld
-        values = { "loss": loss, "mse": mse, "kld": kld}
-        self.log_dict(values, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("grad_norm", self._compute_grad_norm(), prog_bar=True)  # Log gradient norm
+        values = {"loss": loss, "mse": mse, "kld": kld}
+        self.log_dict(
+            values, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True
+        )
+        self.log(
+            "grad_norm", self._compute_grad_norm(), prog_bar=True
+        )  # Log gradient norm
         return loss
 
     def _compute_grad_norm(self):
@@ -86,14 +98,19 @@ class VAE_Lightning(L.LightningModule):
             if p.grad is not None:
                 param_norm = p.grad.data.norm(2)
                 total_norm += param_norm.item() ** 2
-        return total_norm ** 0.5
+        return total_norm**0.5
 
     def validation_step(self, batch, batch_idx):
         _, data = batch
         recon_batch, mu, logvar = self.model(data)
         mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
         loss = mse + kld
-        values = { "val_loss": loss, "val_mse": mse, "val_kld": kld , "gamma": self.gamma.item()}
+        values = {
+            "val_loss": loss,
+            "val_mse": mse,
+            "val_kld": kld,
+            "gamma": self.gamma.item(),
+        }
         self.log_dict(values, on_epoch=True, on_step=False, sync_dist=True)
         return loss
 
@@ -103,9 +120,10 @@ class VAE_Lightning(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
-        optimizer.add_param_group({'params': self.gamma})
+        optimizer.add_param_group({"params": self.gamma})
         return optimizer
-   
+
+
 class Cond_SRVAE(nn.Module):
     def __init__(self, latent_size):
         super(Cond_SRVAE, self).__init__()
@@ -116,17 +134,25 @@ class Cond_SRVAE(nn.Module):
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.ReLU())
-        self.fc_mu_1 = nn.Linear(128 * 4 * 4 *16, self.latent_size)
+            nn.ReLU(),
+        )
+        self.fc_mu_1 = nn.Linear(128 * 4 * 4 * 16, self.latent_size)
         self.fc_logvar_1 = nn.Linear(128 * 4 * 4 * 16, self.latent_size)
         self.fc_decode_y = nn.Linear(self.latent_size, 128 * 4 * 4 * 16)
         self.decoder_1 = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1),  # 128 input channels
+            nn.ConvTranspose2d(
+                128, 64, kernel_size=3, stride=2, padding=1
+            ),  # 128 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # 64 input channels
+            nn.ConvTranspose2d(
+                64, 32, kernel_size=4, stride=2, padding=1
+            ),  # 64 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 4, kernel_size=8, stride=2, padding=1),  # 32 input channels
-            nn.Sigmoid())
+            nn.ConvTranspose2d(
+                32, 4, kernel_size=8, stride=2, padding=1
+            ),  # 32 input channels
+            nn.Sigmoid(),
+        )
 
         self.encoder2 = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
@@ -134,17 +160,25 @@ class Cond_SRVAE(nn.Module):
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.ReLU())
-        self.fc_mu_2 = nn.Linear(128 * 8 * 8 *16, self.latent_size)
+            nn.ReLU(),
+        )
+        self.fc_mu_2 = nn.Linear(128 * 8 * 8 * 16, self.latent_size)
         self.fc_logvar_2 = nn.Linear(128 * 8 * 8 * 16, self.latent_size)
-        self.fc_decode_x = nn.Linear(self.latent_size, 128 * 8 * 8*16)
+        self.fc_decode_x = nn.Linear(self.latent_size, 128 * 8 * 8 * 16)
         self.decoder_2 = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1),  # 128 input channels
+            nn.ConvTranspose2d(
+                128, 64, kernel_size=3, stride=2, padding=1
+            ),  # 128 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # 64 input channels
+            nn.ConvTranspose2d(
+                64, 32, kernel_size=4, stride=2, padding=1
+            ),  # 64 input channels
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 4, kernel_size=8, stride=2, padding=1),  # 32 input channels
-            nn.Sigmoid())
+            nn.ConvTranspose2d(
+                32, 4, kernel_size=8, stride=2, padding=1
+            ),  # 32 input channels
+            nn.Sigmoid(),
+        )
 
         self.y_to_z = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
@@ -154,12 +188,13 @@ class Cond_SRVAE(nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(128 * 4 * 4 *16, self.latent_size//2))
-        self.u_to_z = nn.Linear(self.latent_size, self.latent_size//2)
+            nn.Linear(128 * 4 * 4 * 16, self.latent_size // 2),
+        )
+        self.u_to_z = nn.Linear(self.latent_size, self.latent_size // 2)
         self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
         self.logvar_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
 
-    def z_cond(self, y,u):
+    def z_cond(self, y, u):
         # Define the encoder part of the VAE
         y = self.y_to_z(y)
         y = y.view(y.size(0), -1)
@@ -181,7 +216,7 @@ class Cond_SRVAE(nn.Module):
         mu_y = self.fc_mu_1(y)
         logvar_y = self.fc_logvar_1(y)
         return mu_y, logvar_y
-    
+
     def encode_x(self, x):
         # Define the encoder part of the VAE
         x = self.encoder2(x)
@@ -189,7 +224,7 @@ class Cond_SRVAE(nn.Module):
         mu_x = self.fc_mu_2(x)
         logvar_x = self.fc_logvar_2(x)
         return mu_x, logvar_x
-    
+
     def reparameterize(self, mu, logvar):
         # Reparameterization trick
         std = torch.exp(0.5 * logvar)
@@ -198,13 +233,13 @@ class Cond_SRVAE(nn.Module):
 
     def decode_y(self, u):
         u = self.fc_decode_y(u)
-        u = u.view(u.size(0), 128, 8*2, 8*2)
+        u = u.view(u.size(0), 128, 8 * 2, 8 * 2)
         y = self.decoder_1(u)
         return y
-    
+
     def decode_x(self, z):
         z = self.fc_decode_x(z)
-        z = z.view(z.size(0), 128, 8*4, 8*4)
+        z = z.view(z.size(0), 128, 8 * 4, 8 * 4)
         x = self.decoder_2(z)
         return x
 
@@ -214,14 +249,14 @@ class Cond_SRVAE(nn.Module):
 
         mu_z, logvar_z = self.encode_x(x)
         z = self.reparameterize(mu_z, logvar_z)
-        
+
         mu_z_uy, logvar_z_uy = self.z_cond(y, u)
 
         x_hat = self.decode_x(z)
         y_hat = self.decode_y(u)
 
         return x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy
-    
+
     def conditional_generation(self, y):
         # Generate a sample from the model
         mu_u, logvar_u = self.encode_y(y)
@@ -242,6 +277,7 @@ class Cond_SRVAE(nn.Module):
             param.requires_grad = False
         for param in self.y_to_z.parameters():
             param.requires_grad = False
+
     def unfreeze_cond(self):
         for param in self.u_to_z.parameters():
             param.requires_grad = True
@@ -252,45 +288,94 @@ class Cond_SRVAE(nn.Module):
         for param in self.y_to_z.parameters():
             param.requires_grad = True
 
+
 class Cond_SRVAE_Lightning(L.LightningModule):
     def __init__(self, latent_size):
         super(Cond_SRVAE_Lightning, self).__init__()
         self.model = Cond_SRVAE(latent_size)
         self.gamma = torch.nn.Parameter(torch.ones(1), requires_grad=True)
-    
+
     def training_step(self, batch, batch_idx):
-        y,x = batch
-        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self.model(x,y)
-        mse_x, kld_u, mse_y, kld_z = cond_loss(x_hat, x, y_hat, y, mu_u, logvar_u, mu_z, logvar_z, mu_z_uy, logvar_z_uy, self.gamma)
+        y, x = batch
+        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self.model(
+            x, y
+        )
+        mse_x, kld_u, mse_y, kld_z = cond_loss(
+            x_hat,
+            x,
+            y_hat,
+            y,
+            mu_u,
+            logvar_u,
+            mu_z,
+            logvar_z,
+            mu_z_uy,
+            logvar_z_uy,
+            self.gamma,
+        )
         loss = mse_x + kld_u + mse_y + kld_z
-        values = { "loss": loss, "mse_x": mse_x, "kld_u": kld_u, "mse_y": mse_y, "kld_z": kld_z ,"logvar_z": logvar_z.mean(), "logvar_z_uy": logvar_z_uy.mean(), "mu_z_uy": mu_z_uy.mean(), "mu_z": mu_z.mean()}
-        self.log_dict(values, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        values = {
+            "loss": loss,
+            "mse_x": mse_x,
+            "kld_u": kld_u,
+            "mse_y": mse_y,
+            "kld_z": kld_z,
+            "logvar_z": logvar_z.mean(),
+            "logvar_z_uy": logvar_z_uy.mean(),
+            "mu_z_uy": mu_z_uy.mean(),
+            "mu_z": mu_z.mean(),
+        }
+        self.log_dict(
+            values, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
         y, x = batch
-        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self.model(x,y)
-        mse_x, kld_u, mse_y, kld_z = cond_loss(x_hat, x, y_hat, y, mu_u, logvar_u, mu_z, logvar_z, mu_z_uy, logvar_z_uy, self.gamma)
+        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self.model(
+            x, y
+        )
+        mse_x, kld_u, mse_y, kld_z = cond_loss(
+            x_hat,
+            x,
+            y_hat,
+            y,
+            mu_u,
+            logvar_u,
+            mu_z,
+            logvar_z,
+            mu_z_uy,
+            logvar_z_uy,
+            self.gamma,
+        )
         loss = mse_x + kld_u + mse_y + kld_z
-        values = { "val_loss": loss, "val_mse_x": mse_x, "val_kld_u": kld_u, "val_mse_y": mse_y, "val_kld_z": kld_z , "gamma": self.gamma.item()}
+        values = {
+            "val_loss": loss,
+            "val_mse_x": mse_x,
+            "val_kld_u": kld_u,
+            "val_mse_y": mse_y,
+            "val_kld_z": kld_z,
+            "gamma": self.gamma.item(),
+        }
         self.log_dict(values, on_epoch=True, on_step=True, sync_dist=True)
-        return loss    
+        return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
-        optimizer.add_param_group({'params': self.gamma})
+        optimizer.add_param_group({"params": self.gamma})
         return optimizer
+
 
 if __name__ == "__main__":
     LATENT_SIZE = 2048
     model = Cond_SRVAE(LATENT_SIZE)
     x = torch.randn(1, 4, 256, 256)
     y = torch.randn(1, 4, 128, 128)
-    x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x,y)
+    x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x, y)
 
     assert x_hat.shape == x.shape
     assert y_hat.shape == y.shape
-    for i,var in enumerate([mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy]):
+    for i, var in enumerate([mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy]):
         print(f"Testing {i}")
         assert var.shape == (1, LATENT_SIZE)
     print("All size tests passed!")
