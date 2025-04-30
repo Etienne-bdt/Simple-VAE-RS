@@ -159,16 +159,6 @@ class Cond_SRVAE(nn.Module):
         self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
         self.logvar_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
 
-        self._initialize_weights()  # Add weight initialization
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-
     def z_cond(self, y,u):
         # Define the encoder part of the VAE
         y = self.y_to_z(y)
@@ -206,10 +196,10 @@ class Cond_SRVAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def decode_y(self, z):
-        z = self.fc_decode_y(z)
-        z = z.view(z.size(0), 128, 8*2, 8*2)
-        y = self.decoder_1(z)
+    def decode_y(self, u):
+        u = self.fc_decode_y(u)
+        u = u.view(u.size(0), 128, 8*2, 8*2)
+        y = self.decoder_1(u)
         return y
     
     def decode_x(self, z):
@@ -243,17 +233,7 @@ class Cond_SRVAE(nn.Module):
         x_hat = self.decode_x(z)
         return x_hat
 
-    def freeze_x(self):
-        for param in self.encoder2.parameters():
-            param.requires_grad = False
-        for param in self.fc_mu_2.parameters():
-            param.requires_grad = False
-        for param in self.fc_logvar_2.parameters():
-            param.requires_grad = False
-        for param in self.fc_decode_x.parameters():
-            param.requires_grad = False
-        for param in self.decoder_2.parameters():
-            param.requires_grad = False
+    def freeze_cond(self):
         for param in self.u_to_z.parameters():
             param.requires_grad = False
         for param in self.mu_u_y_to_z.parameters():
@@ -262,17 +242,7 @@ class Cond_SRVAE(nn.Module):
             param.requires_grad = False
         for param in self.y_to_z.parameters():
             param.requires_grad = False
-    def unfreeze_x(self):
-        for param in self.encoder2.parameters():
-            param.requires_grad = True
-        for param in self.fc_mu_2.parameters():
-            param.requires_grad = True
-        for param in self.fc_logvar_2.parameters():
-            param.requires_grad = True
-        for param in self.fc_decode_x.parameters():
-            param.requires_grad = True
-        for param in self.decoder_2.parameters():
-            param.requires_grad = True
+    def unfreeze_cond(self):
         for param in self.u_to_z.parameters():
             param.requires_grad = True
         for param in self.mu_u_y_to_z.parameters():

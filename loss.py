@@ -43,8 +43,7 @@ def cond_loss(
         F.mse_loss(recon_y, y, reduction="mean") / (2 * gamma2.pow(2)) + (gamma2.log())
     )
     kld_z = 0.5 * (
-        torch.sum(logvar3 - logvar2)
-        - d
+        torch.sum(logvar3 - logvar2 - 1)
         + torch.sum((logvar2 - logvar3).exp())
         + torch.sum((mu2 - mu3).pow(2) * ((-logvar3).exp()))
     )
