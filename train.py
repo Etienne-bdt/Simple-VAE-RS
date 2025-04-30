@@ -1,6 +1,5 @@
 import argparse
 
-import matplotlib.pyplot as plt
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
@@ -39,6 +38,8 @@ def train(
     """
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
+    y, _ = next(iter(train_loader))
+    b, c, h, w = y.shape
     for epoch in range(1, epochs + 1):
         model.train()
         train_loss = 0
@@ -139,14 +140,14 @@ def train(
 
         writer.add_images(
             "Reconstruction/LR_Original",
-            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
+            normalize_image(y.view(b, c, h, w)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/LR",
-            normalize_image(y_hat.view(-1, 4, 128, 128)[:, bands, :, :]),
+            normalize_image(y_hat.view(b, c, h, w)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -154,21 +155,21 @@ def train(
         conditional_gen = model.conditional_generation(y)
         writer.add_images(
             "Conditional Generation/Original",
-            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
+            normalize_image(y.view(b, c, h, w)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR",
-            normalize_image(conditional_gen.view(-1, 4, 256, 256)[:, bands, :, :]),
+            normalize_image(conditional_gen.view(b, c, h * 2, w * 2)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/HR",
-            normalize_image(x_hat.view(-1, 4, 256, 256)[:, bands, :, :]),
+            normalize_image(x_hat.view(b, c, h * 2, w * 2)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -234,7 +235,7 @@ def main(args):
     train_loader, val_loader = init_dataloader(
         args.dataset, args.batch_size, args.patch_size
     )
-    latent_size = 3500
+    latent_size = 4096
     model = Cond_SRVAE(latent_size, args.patch_size)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
