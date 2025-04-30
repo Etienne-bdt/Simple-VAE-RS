@@ -8,6 +8,7 @@ from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
 from utils import normalize_image
+import matplotlib.pyplot as plt
 
 
 def train(
@@ -23,23 +24,21 @@ def train(
     bands=[2, 1, 0],
 ):
     """
-    Training script for the Conditional SRVAE model.
-    Args:
-        device: The device to use for training (CPU or GPU).
-        model: The Conditional SRVAE model.
-        train_loader: DataLoader for the training set.
-        val_loader: DataLoader for the validation set.
-        gamma: The gamma parameter for the loss function.
-        gamma2: The gamma2 parameter for the loss function.
-        optimizer: The optimizer for training.
-        epochs: Number of epochs to (pre)train the model.
-        pretrain: If True, pretrain the model on low resolution data.
-        bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
+        Training script for the Conditional SRVAE model.
+        Args:
+            device: The device to use for training (CPU or GPU).
+            model: The Conditional SRVAE model.
+            train_loader: DataLoader for the training set.
+            val_loader: DataLoader for the validation set.
+            gamma: The gamma parameter for the loss function.
+            gamma2: The gamma2 parameter for the loss function.
+            optimizer: The optimizer for training.
+            epochs: Number of epochs to (pre)train the model.
+            pretrain: If True, pretrain the model on low resolution data.
+            bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
-    y, _ = next(iter(train_loader))
-    _, c, h, w = y.shape
     for epoch in range(1, epochs + 1):
         model.train()
         train_loss = 0
@@ -140,14 +139,14 @@ def train(
 
         writer.add_images(
             "Reconstruction/LR_Original",
-            normalize_image(y.view(-1, c, h, w)[:, bands, :, :]),
+            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/LR",
-            normalize_image(y_hat.view(-1, c, h, w)[:, bands, :, :]),
+            normalize_image(y_hat.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -155,21 +154,21 @@ def train(
         conditional_gen = model.conditional_generation(y)
         writer.add_images(
             "Conditional Generation/Original",
-            normalize_image(y.view(-1, c, h, w)[:, bands, :, :]),
+            normalize_image(y.view(-1, 4, 128, 128)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR",
-            normalize_image(conditional_gen.view(-1, c, h * 2, w * 2)[:, bands, :, :]),
+            normalize_image(conditional_gen.view(-1, 4, 256, 256)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/HR",
-            normalize_image(x_hat.view(-1, c, h * 2, w * 2)[:, bands, :, :]),
+            normalize_image(x_hat.view(-1, 4, 256, 256)[:, bands, :, :]),
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -222,6 +221,7 @@ def train(
     if torch.isnan(loss):
         raise ValueError("Loss is NaN, stopping training.")
 
+
     writer.close()  # Close the TensorBoard writer
     return
 
@@ -232,12 +232,11 @@ def main(args):
     args.epochs : number of epochs to train the model
     args.dataset : dataset to use for training
     """
-    train_loader, val_loader = init_dataloader(
-        args.dataset, args.batch_size, args.patch_size
-    )
-    latent_size = 4096
-    model = Cond_SRVAE(latent_size, args.patch_size)
+    train_loader, val_loader = init_dataloader(args.dataset)
+    latent_size = 3500
+    model = Cond_SRVAE(latent_size)
 
+    # Sanity Check dataloader
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
@@ -293,20 +292,6 @@ def parse_args():
     parser.add_argument(
         "--dataset", type=str, default="s2v", help="Type of the dataset"
     )
-
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=16,
-        help="Batch size for training and validation.",
-    )
-    parser.add_argument(
-        "--patch_size",
-        type=int,
-        default=64,
-        help="Patch size of the High-Res Images.",
-    )
-
     parser.add_argument(
         "--test",
         action="store_true",
@@ -318,8 +303,4 @@ def parse_args():
 
 if __name__ == "__main__":
     arguments = parse_args()
-    print("==========================")
-    print("Initializing training with the following arguments:")
-    print(arguments)
-    print("==========================")
     main(args=arguments)
