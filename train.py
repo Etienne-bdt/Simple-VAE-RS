@@ -1,5 +1,6 @@
 import argparse
 
+import matplotlib.pyplot as plt
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
@@ -8,7 +9,6 @@ from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
 from utils import normalize_image
-import matplotlib.pyplot as plt
 
 
 def train(
@@ -24,18 +24,18 @@ def train(
     bands=[2, 1, 0],
 ):
     """
-        Training script for the Conditional SRVAE model.
-        Args:
-            device: The device to use for training (CPU or GPU).
-            model: The Conditional SRVAE model.
-            train_loader: DataLoader for the training set.
-            val_loader: DataLoader for the validation set.
-            gamma: The gamma parameter for the loss function.
-            gamma2: The gamma2 parameter for the loss function.
-            optimizer: The optimizer for training.
-            epochs: Number of epochs to (pre)train the model.
-            pretrain: If True, pretrain the model on low resolution data.
-            bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
+    Training script for the Conditional SRVAE model.
+    Args:
+        device: The device to use for training (CPU or GPU).
+        model: The Conditional SRVAE model.
+        train_loader: DataLoader for the training set.
+        val_loader: DataLoader for the validation set.
+        gamma: The gamma parameter for the loss function.
+        gamma2: The gamma2 parameter for the loss function.
+        optimizer: The optimizer for training.
+        epochs: Number of epochs to (pre)train the model.
+        pretrain: If True, pretrain the model on low resolution data.
+        bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
@@ -221,7 +221,6 @@ def train(
     if torch.isnan(loss):
         raise ValueError("Loss is NaN, stopping training.")
 
-
     writer.close()  # Close the TensorBoard writer
     return
 
@@ -232,11 +231,12 @@ def main(args):
     args.epochs : number of epochs to train the model
     args.dataset : dataset to use for training
     """
-    train_loader, val_loader = init_dataloader(args.dataset)
+    train_loader, val_loader = init_dataloader(
+        args.dataset, args.batch_size, args.patch_size
+    )
     latent_size = 3500
-    model = Cond_SRVAE(latent_size)
+    model = Cond_SRVAE(latent_size, args.patch_size)
 
-    # Sanity Check dataloader
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
@@ -292,6 +292,20 @@ def parse_args():
     parser.add_argument(
         "--dataset", type=str, default="s2v", help="Type of the dataset"
     )
+
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+        help="Batch size for training and validation.",
+    )
+    parser.add_argument(
+        "--patch_size",
+        type=int,
+        default=64,
+        help="Patch size of the High-Res Images.",
+    )
+
     parser.add_argument(
         "--test",
         action="store_true",
