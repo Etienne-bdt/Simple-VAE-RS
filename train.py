@@ -1,4 +1,6 @@
 import argparse
+import os
+import time
 
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -36,6 +38,8 @@ def train(
         pretrain: If True, pretrain the model on low resolution data.
         bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
+    #SLURM JOB ID
+    slurm_job_id = os.environ.get("SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}")
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
     y, _ = next(iter(train_loader))
@@ -134,7 +138,7 @@ def train(
             print(
                 f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}"
             )
-            torch.save(model.state_dict(), "best_model.pth")
+            torch.save(model.state_dict(), f"best_model_{slurm_job_id}.pth")
 
         # Log reconstruction and Conditional generation
 
