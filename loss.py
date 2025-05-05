@@ -17,7 +17,7 @@ def cond_loss(
     recon_x, x, recon_y, y, mu1, logvar1, mu2, logvar2, mu3, logvar3, gamma, gamma2
 ):
     """
-    Loss function for the Conditional Super-Resolution VAE. This function minimizes the **NEGATIVE** ELBO: 
+    Loss function for the Conditional Super-Resolution VAE. This function minimizes the **NEGATIVE** ELBO:
     .. math::
         -(E[log p(x|z)] - D_KL(q(z|x)||p(z))) .
 

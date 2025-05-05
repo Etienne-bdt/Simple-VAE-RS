@@ -247,8 +247,8 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
-    gamma = torch.tensor([1.]).to(device)
-    gamma2 = torch.tensor([1.]).to(device)
+    gamma = torch.tensor([1.0]).to(device)
+    gamma2 = torch.tensor([1.0]).to(device)
     gamma.requires_grad = True
     gamma2.requires_grad = True
     optimizer.add_param_group({"params": [gamma, gamma2]})
