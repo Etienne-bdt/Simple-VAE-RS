@@ -38,8 +38,10 @@ def train(
         pretrain: If True, pretrain the model on low resolution data.
         bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
-    #SLURM JOB ID
-    slurm_job_id = os.environ.get("SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}")
+    # SLURM JOB ID
+    slurm_job_id = os.environ.get(
+        "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
+    )
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
     y, _ = next(iter(train_loader))
@@ -245,9 +247,9 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
-    gamma = torch.tensor([0.25]).to(device)
+    gamma = torch.tensor([1.0]).to(device)
+    gamma2 = torch.tensor([1.0]).to(device)
     gamma.requires_grad = True
-    gamma2 = torch.tensor([0.25]).to(device)
     gamma2.requires_grad = True
     optimizer.add_param_group({"params": [gamma, gamma2]})
 
@@ -288,7 +290,7 @@ def parse_args():
     parser.add_argument(
         "--pre_epochs",
         type=int,
-        default=5,
+        default=20,
         help="Number of epochs to pre-train the low resolution model.",
     )
     parser.add_argument(
