@@ -3,6 +3,7 @@ import os
 import time
 
 import torch
+import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
 
@@ -146,36 +147,57 @@ def train(
 
         writer.add_images(
             "Reconstruction/LR_Original",
-            normalize_image(y.view(-1, c, h, w)[:, bands, :, :]),
+            y.view(-1, c, h, w)[:, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/LR",
-            normalize_image(y_hat.view(-1, c, h, w)[:, bands, :, :]),
+            y_hat.view(-1, c, h, w)[:, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         conditional_gen = model.conditional_generation(y)
         writer.add_images(
-            "Conditional Generation/Original",
-            normalize_image(y.view(-1, c, h, w)[:, bands, :, :]),
+            "Conditional Generation/LR_Original",
+            y.view(-1, c, h, w)[:, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR",
-            normalize_image(conditional_gen.view(-1, c, h * 2, w * 2)[:, bands, :, :]),
+            conditional_gen.view(-1, c, h * 2, w * 2)[:, bands, :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Conditional Generation/HR_Original",
+            x.view(-1, c, h * 2, w * 2)[:, bands, :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Conditional Generation/HR_Interpolation",
+            F.interpolate(y.view(-1, c, h, w)[:, bands, :, :],scale_factor=2,mode="bicubic"),
+            global_step=epoch,
+            dataformats="NCHW",
+        )
+
+        writer.add_images(
+            "Reconstruction/HR_Original",
+            x.view(-1, c, h * 2, w * 2)[:, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/HR",
-            normalize_image(x_hat.view(-1, c, h * 2, w * 2)[:, bands, :, :]),
+            x_hat.view(-1, c, h * 2, w * 2)[:, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -225,8 +247,8 @@ def train(
             "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
         )
 
-    if torch.isnan(loss):
-        raise ValueError("Loss is NaN, stopping training.")
+        if torch.isnan(loss):
+            raise ValueError("Loss is NaN, stopping training.")
 
     writer.close()  # Close the TensorBoard writer
     return
