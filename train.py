@@ -10,7 +10,6 @@ from tqdm import tqdm
 from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
-from utils import normalize_image
 
 
 def train(
@@ -147,14 +146,14 @@ def train(
 
         writer.add_images(
             "Reconstruction/LR_Original",
-            y.view(-1, c, h, w)[:, bands, :, :],
+            y.view(-1, c, h, w)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/LR",
-            y_hat.view(-1, c, h, w)[:, bands, :, :],
+            y_hat.view(-1, c, h, w)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -162,21 +161,21 @@ def train(
         conditional_gen = model.conditional_generation(y)
         writer.add_images(
             "Conditional Generation/LR_Original",
-            y.view(-1, c, h, w)[:, bands, :, :],
+            y.view(-1, c, h, w)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR",
-            conditional_gen.view(-1, c, h * 2, w * 2)[:, bands, :, :],
+            conditional_gen.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Conditional Generation/HR_Original",
-            x.view(-1, c, h * 2, w * 2)[:, bands, :, :],
+            x.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -184,7 +183,7 @@ def train(
         writer.add_images(
             "Conditional Generation/HR_Interpolation",
             F.interpolate(
-                y.view(-1, c, h, w)[:, bands, :, :], scale_factor=2, mode="bicubic"
+                y.view(-1, c, h, w)[:4, bands, :, :], scale_factor=2, mode="bicubic"
             ),
             global_step=epoch,
             dataformats="NCHW",
@@ -192,14 +191,14 @@ def train(
 
         writer.add_images(
             "Reconstruction/HR_Original",
-            x.view(-1, c, h * 2, w * 2)[:, bands, :, :],
+            x.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
 
         writer.add_images(
             "Reconstruction/HR",
-            x_hat.view(-1, c, h * 2, w * 2)[:, bands, :, :],
+            x_hat.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
             global_step=epoch,
             dataformats="NCHW",
         )
@@ -270,7 +269,7 @@ def main(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     gamma = torch.tensor([1.0]).to(device)
     gamma2 = torch.tensor([1.0]).to(device)
     gamma.requires_grad = True
@@ -351,5 +350,7 @@ if __name__ == "__main__":
     print("==========================")
     print("Initializing training with the following arguments:")
     print(arguments)
+    print("--------------------------")
+    print("Device:", "cuda" if torch.cuda.is_available() else "cpu")
     print("==========================")
     main(args=arguments)
