@@ -183,7 +183,9 @@ def train(
 
         writer.add_images(
             "Conditional Generation/HR_Interpolation",
-            F.interpolate(y.view(-1, c, h, w)[:, bands, :, :],scale_factor=2,mode="bicubic"),
+            F.interpolate(
+                y.view(-1, c, h, w)[:, bands, :, :], scale_factor=2, mode="bicubic"
+            ),
             global_step=epoch,
             dataformats="NCHW",
         )
