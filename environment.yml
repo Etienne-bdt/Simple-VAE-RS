@@ -8,6 +8,7 @@ dependencies:
   - tqdm
   - matplotlib
   - polars
+  - pre-commit
   - pip
   - pip:
       - torch
