@@ -5,8 +5,5 @@ repos:
       # Run Ruff lint with --fix only on pre-push
       - id: ruff
         args: [--fix]
-        stages: [push]
-
       # Run Ruff formatter on pre-commit
       - id: ruff-format
-        stages: [push]
