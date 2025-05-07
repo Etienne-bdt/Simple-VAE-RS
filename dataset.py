@@ -139,7 +139,7 @@ class Sen2VenDataset(Dataset):
         img2 = torch.tensor(img2, dtype=torch.float32)
 
         if self.transform:
-            img1, img2 = self.sr_randomCrop(img1, img2)
+            img1, img2 = self.sr_randomcrop(img1, img2)
 
         # Normalize the images
         img1 = normalize_image(img1)
@@ -147,7 +147,7 @@ class Sen2VenDataset(Dataset):
 
         return img1, img2
 
-    def sr_randomCrop(self, img1, img2):
+    def sr_randomcrop(self, img1, img2):
         """
         Randomly crop the images to the specified patch size. Images will share the same portion of the image, the first image will be cropped to half the patch size.
         The second image will be cropped to the full patch size.
