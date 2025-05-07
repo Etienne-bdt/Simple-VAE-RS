@@ -50,7 +50,6 @@ class EarlyStopper:
         Call this method to check if training should be stopped.
         Args:
             val_loss (float): Current validation loss.
-            epoch (int): Current epoch number.
         """
         if val_loss < self.best_loss - self.delta:
             self.best_loss = val_loss
