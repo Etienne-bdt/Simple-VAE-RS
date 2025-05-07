@@ -42,7 +42,6 @@ class EarlyStopper:
         self.delta = delta
         self.counter = 0
         self.best_loss = float("inf")
-        self.early_stop = False
         self.best_epoch = 0
 
     def __call__(self, val_loss: float):
