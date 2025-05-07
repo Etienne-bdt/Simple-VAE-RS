@@ -269,6 +269,21 @@ class Cond_SRVAE(nn.Module):
         x_hat = self.decode_x(z)
         return x_hat
 
+    def sample(self, y, samples=1000):
+        # Generate samples from the model
+        mu_u, logvar_u = self.encode_y(y)
+        u = self.reparameterize(mu_u, logvar_u)
+
+        mu_z_uy, logvar_z_uy = self.z_cond(y, u)
+
+        std = torch.exp(0.5 * logvar_z_uy)
+        latent = std.size(1)
+        eps = torch.randn((samples, latent)).to(std.device)
+
+        z = mu_z_uy + eps * std
+
+        return self.decode_x(z)
+
     def freeze_cond(self):
         for param in self.u_to_z.parameters():
             param.requires_grad = False
