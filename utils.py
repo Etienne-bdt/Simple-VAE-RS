@@ -1,5 +1,6 @@
 import torch
 
+
 def normalize_image(image: torch.Tensor) -> torch.Tensor:
     """
     Normalize the image tensor to the range [0, 1] for visualization.
@@ -20,3 +21,42 @@ def normalize_image(image: torch.Tensor) -> torch.Tensor:
     else:
         raise ValueError("Input image must be 3D or 4D tensor.")
     return normalized_image
+
+
+class EarlyStopper:
+    """
+    Early stopping utility to stop training when validation loss does not improve.
+    Args:
+        patience (int): Number of epochs with no improvement after which training will be stopped.
+        delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+    """
+
+    def __init__(self, patience: int = 10, delta: float = 0):
+        """
+        Early stopping utility to stop training when validation loss does not improve.
+        Args:
+            patience (int): Number of epochs with no improvement after which training will be stopped.
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+        """
+        self.patience = patience
+        self.delta = delta
+        self.counter = 0
+        self.best_loss = float("inf")
+        self.early_stop = False
+        self.best_epoch = 0
+
+    def __call__(self, val_loss: float):
+        """
+        Call this method to check if training should be stopped.
+        Args:
+            val_loss (float): Current validation loss.
+            epoch (int): Current epoch number.
+        """
+        if val_loss < self.best_loss - self.delta:
+            self.best_loss = val_loss
+            self.counter = 0
+        elif val_loss > self.best_loss + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False

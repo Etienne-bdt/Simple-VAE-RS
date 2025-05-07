@@ -10,6 +10,7 @@ from tqdm import tqdm
 from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
+from utils import EarlyStopper
 
 
 def train(
@@ -44,6 +45,7 @@ def train(
     )
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
+    early_stopper = EarlyStopper(patience=10, delta=0.001)  # Initialize early stopper
     y, _ = next(iter(train_loader))
     _, c, h, w = y.shape
     for epoch in range(1, epochs + 1):
@@ -135,12 +137,18 @@ def train(
 
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
+        if early_stopper(val_loss / len(val_loader.dataset)):
+            print(f"====> Early stopping at epoch {epoch} with loss: {val_loss:.4f}")
+            break
         if val_loss / len(val_loader.dataset) < best_loss:
             best_loss = val_loss / len(val_loader.dataset)
             print(
                 f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}"
             )
-            torch.save(model.state_dict(), f"best_model_{slurm_job_id}.pth")
+            torch.save(
+                model.state_dict(),
+                f"{'pre_' if pretrain else ''}best_model_{slurm_job_id}.pth",
+            )
 
         # Log reconstruction and Conditional generation
 
@@ -291,6 +299,9 @@ def main(args):
     )
 
     model.unfreeze_cond()
+    # Lower learning rate for the conditional part
+    for param_group in optimizer.param_groups:
+        param_group["lr"] = 5e-4
 
     train(
         device,
