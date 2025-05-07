@@ -28,8 +28,8 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
     train_size = int(0.8 * len(ds))
-    val_size = len(ds) - train_size
-    train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
+    train_ds = torch.utils.data.Subset(ds, range(train_size))
+    val_ds = torch.utils.data.Subset(ds, range(train_size, len(ds)))
     train_loader = torch.utils.data.DataLoader(
         train_ds, batch_size, shuffle=True, num_workers=6, persistent_workers=True
     )

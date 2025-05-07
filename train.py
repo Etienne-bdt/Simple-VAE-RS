@@ -10,6 +10,7 @@ from tqdm import tqdm
 from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
+from test import test
 from utils import EarlyStopper
 
 
@@ -23,7 +24,7 @@ def train(
     optimizer,
     epochs,
     pretrain=False,
-    bands=[2, 1, 0],
+    bands=None,
 ):
     """
     Training script for the Conditional SRVAE model.
@@ -39,13 +40,14 @@ def train(
         pretrain: If True, pretrain the model on low resolution data.
         bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
+    bands = bands or [2, 1, 0]  # Default to RGB bands if not provided
     # SLURM JOB ID
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
     writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
-    early_stopper = EarlyStopper(patience=10, delta=0.001)  # Initialize early stopper
+    early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
     y, _ = next(iter(train_loader))
     _, c, h, w = y.shape
     for epoch in range(1, epochs + 1):
@@ -315,6 +317,8 @@ def main(args):
         epochs=args.epochs,
         pretrain=False,
     )
+
+    test(device, model, val_loader)
 
 
 def parse_args():
