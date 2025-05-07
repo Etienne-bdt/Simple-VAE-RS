@@ -166,36 +166,37 @@ def train(
             dataformats="NCHW",
         )
 
-        conditional_gen = model.conditional_generation(y)
-        writer.add_images(
-            "Conditional Generation/LR_Original",
-            y.view(-1, c, h, w)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
-        )
+        if not pretrain:
+            conditional_gen = model.conditional_generation(y)
+            writer.add_images(
+                "Conditional Generation/LR_Original",
+                y.view(-1, c, h, w)[:4, bands, :, :],
+                global_step=epoch,
+                dataformats="NCHW",
+            )
 
-        writer.add_images(
-            "Conditional Generation/HR",
-            conditional_gen.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
-        )
+            writer.add_images(
+                "Conditional Generation/HR",
+                conditional_gen.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
+                global_step=epoch,
+                dataformats="NCHW",
+            )
 
-        writer.add_images(
-            "Conditional Generation/HR_Original",
-            x.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
-        )
+            writer.add_images(
+                "Conditional Generation/HR_Original",
+                x.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
+                global_step=epoch,
+                dataformats="NCHW",
+            )
 
-        writer.add_images(
-            "Conditional Generation/HR_Interpolation",
-            F.interpolate(
-                y.view(-1, c, h, w)[:4, bands, :, :], scale_factor=2, mode="bicubic"
-            ),
-            global_step=epoch,
-            dataformats="NCHW",
-        )
+            writer.add_images(
+                "Conditional Generation/HR_Interpolation",
+                F.interpolate(
+                    y.view(-1, c, h, w)[:4, bands, :, :], scale_factor=2, mode="bicubic"
+                ),
+                global_step=epoch,
+                dataformats="NCHW",
+            )
 
         writer.add_images(
             "Reconstruction/HR_Original",
