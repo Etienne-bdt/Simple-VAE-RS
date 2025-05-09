@@ -115,7 +115,8 @@ class Sen2VenDataset(Dataset):
         self.df = pl.read_csv(csv_path, has_header=True, separator="	")
         self.patch_size = patch_size
         self.crop = crop
-        assert crop in ["grid", "random"], "Crop must be 'grid' or 'random'"
+        if crop not in ["grid", "random"]:
+            raise ValueError("Crop must be 'grid' or 'random'")
         if bands == "visu":
             self.df = self.df.select(["b2b3b4b8_10m", "b2b3b4b8_05m"])
             self.p0 = "b2b3b4b8_10m"
@@ -156,7 +157,7 @@ class Sen2VenDataset(Dataset):
 
         if self.transform:
             if self.crop == "random":
-                img1, img2 = self.sr_randomCrop(img1, img2)
+                img1, img2 = self.sr_randomcrop(img1, img2)
             elif self.crop == "grid":
                 img1 = self.grid_crop(img1, self.patch_size // 2)
                 img2 = self.grid_crop(img2, self.patch_size)
