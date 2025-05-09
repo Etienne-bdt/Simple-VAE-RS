@@ -31,10 +31,24 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
     val_size = len(ds) - train_size
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
     train_loader = torch.utils.data.DataLoader(
-        train_ds, batch_size, shuffle=True, num_workers=6, persistent_workers=True
+        train_ds,
+        batch_size,
+        shuffle=True,
+        num_workers=6,
+        persistent_workers=True,
+        collate_fn=grid_collate
+        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid"
+        else None,
     )
     val_loader = torch.utils.data.DataLoader(
-        val_ds, batch_size, shuffle=False, num_workers=6, persistent_workers=True
+        val_ds,
+        batch_size,
+        shuffle=False,
+        num_workers=6,
+        persistent_workers=True,
+        collate_fn=grid_collate
+        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid"
+        else None,
     )
     return train_loader, val_loader
 
@@ -94,12 +108,14 @@ class FloodDataset(Dataset):
 
 
 class Sen2VenDataset(Dataset):
-    def __init__(self, patch_size=256, dataset="ARM", bands="visu"):
+    def __init__(self, patch_size=256, crop="grid", dataset="ARM", bands="visu"):
         super(Sen2VenDataset, self).__init__()
         self.dataset = os.path.join(os.getcwd(), dataset)
         csv_path = os.path.join(self.dataset, "index.csv")
         self.df = pl.read_csv(csv_path, has_header=True, separator="	")
         self.patch_size = patch_size
+        self.crop = crop
+        assert crop in ["grid", "random"], "Crop must be 'grid' or 'random'"
         if bands == "visu":
             self.df = self.df.select(["b2b3b4b8_10m", "b2b3b4b8_05m"])
             self.p0 = "b2b3b4b8_10m"
@@ -139,7 +155,11 @@ class Sen2VenDataset(Dataset):
         img2 = torch.tensor(img2, dtype=torch.float32)
 
         if self.transform:
-            img1, img2 = self.sr_randomCrop(img1, img2)
+            if self.crop == "random":
+                img1, img2 = self.sr_randomCrop(img1, img2)
+            elif self.crop == "grid":
+                img1 = self.grid_crop(img1, self.patch_size // 2)
+                img2 = self.grid_crop(img2, self.patch_size)
 
         # Normalize the images
         img1 = normalize_image(img1)
@@ -166,12 +186,38 @@ class Sen2VenDataset(Dataset):
         img1 = img1[
             :, top : top + self.patch_size // 2, left : left + self.patch_size // 2
         ]
-        img2 = img2[
-            :,
-            top * 2 : top * 2 + self.patch_size,
-            left * 2 : left * 2 + self.patch_size,
-        ]
         return img1, img2
+
+    def grid_crop(self, img, patch_size):
+        """
+        Crop the image into a grid of patches of the specified patch size.
+
+        Args:
+            img (torch.Tensor): The image tensor to crop.
+            patch_size (int): The size of each patch.
+        Returns:
+            List[torch.Tensor]: A list of cropped patches.
+        """
+        _, h, w = img.shape
+        patches = []
+        for row in range(0, h, patch_size):
+            for col in range(0, w, patch_size):
+                if row + patch_size <= h and col + patch_size <= w:
+                    patch = img[:, row : row + patch_size, col : col + patch_size]
+                    patches.append(patch)
+        return torch.stack(patches, dim=0)
+
+
+def grid_collate(batch):
+    """
+    Custom collate function to handle the grid of patches.
+    Args:
+        batch (list): A list of batches.
+    Returns:
+        torch.Tensor: A tensor containing the concatenated patches.
+    """
+    t1, t2 = zip(*batch)
+    return (torch.cat(t1, dim=0), torch.cat(t2, dim=0))
 
 
 if __name__ == "__main__":
@@ -180,6 +226,10 @@ if __name__ == "__main__":
     print(f"Number of samples: {len(ds)}")
     for i in range(5):
         img1, img2 = ds[i]
+        if img1.ndim == 4:
+            # If grid cropping is used, the images will have 4 dimensions instead of 3
+            # in this case, we take the first image of the batch for the test
+            img1, img2 = img1[0], img2[0]
         print(f"Image 1 shape: {img1.shape}, Image 2 shape: {img2.shape}")
         plt.imsave(
             f"img1_{i}.png",
@@ -189,3 +239,9 @@ if __name__ == "__main__":
             f"img2_{i}.png",
             img2[[2, 1, 0], :, :].permute(1, 2, 0).numpy(),
         )
+
+    train_loader, val_loader = init_dataloader(
+        "Sen2Venus", batch_size=16, patch_size=64
+    )
+    batch = next(iter(train_loader))
+    print(f"Batch shape: {batch[0].shape}, {batch[1].shape}")
