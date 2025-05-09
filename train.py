@@ -140,7 +140,9 @@ def train(
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
         if early_stopper(val_loss / len(val_loader.dataset)):
-            print(f"====> Early stopping at epoch {epoch} with loss: {val_loss:.4f}")
+            print(
+                f"====> Early stopping at epoch {epoch} with loss: {val_loss / len(val_loader.dataset):.4f}"
+            )
             break
         if val_loss / len(val_loader.dataset) < best_loss:
             best_loss = val_loss / len(val_loader.dataset)
