@@ -291,6 +291,11 @@ def main(args):
 
     model.freeze_cond()
 
+    if args.model_ckpt:
+        print("Loading model from checkpoint...")
+        model.load_state_dict(torch.load(args.model_ckpt))
+        print("Model loaded successfully.")
+
     train(
         device,
         model,
@@ -360,6 +365,12 @@ def parse_args():
         help="If set, the model will be tested instead of trained.",
     )
 
+    parser.add_argument(
+        "--model_ckpt",
+        type=str,
+        help="Path to the model checkpoint to resume training.",
+    )
+
     return parser.parse_args()
 
 
@@ -368,6 +379,16 @@ if __name__ == "__main__":
     print("==========================")
     print("Initializing training with the following arguments:")
     print(arguments)
+    print("--------------------------")
+    print(
+        f"Model checkpoint: {'not' if arguments.model_ckpt is None else arguments.model_ckpt} provided"
+    )
+    if arguments.model_ckpt:
+        print("Checking if model exists...")
+        if not os.path.exists(arguments.model_ckpt):
+            raise FileNotFoundError(
+                f"Model checkpoint {arguments.model_ckpt} not found."
+            )
     print("--------------------------")
     print("Device:", "cuda" if torch.cuda.is_available() else "cpu")
     print("==========================")
