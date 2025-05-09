@@ -31,7 +31,7 @@ class EarlyStopper:
         delta (float): Minimum change in the monitored quantity to qualify as an improvement.
     """
 
-    def __init__(self, patience: int = 10, delta: float = 0):
+    def __init__(self, patience: int = 10, delta: float = 0) -> None:
         """
         Early stopping utility to stop training when validation loss does not improve.
         Args:
@@ -44,7 +44,7 @@ class EarlyStopper:
         self.best_loss = float("inf")
         self.best_epoch = 0
 
-    def __call__(self, val_loss: float):
+    def __call__(self, val_loss: float) -> bool:
         """
         Call this method to check if training should be stopped.
         Args:

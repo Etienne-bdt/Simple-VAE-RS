@@ -17,5 +17,5 @@ source activate vae-rs
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
-python train.py --patch_size 64 --batch_size 32 --pre_epochs 100
+python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --model_ckpt "pre_best_model_3846651.pth"
 

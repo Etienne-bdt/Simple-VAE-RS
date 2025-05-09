@@ -140,7 +140,9 @@ def train(
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
         if early_stopper(val_loss / len(val_loader.dataset)):
-            print(f"====> Early stopping at epoch {epoch} with loss: {val_loss:.4f}")
+            print(
+                f"====> Early stopping at epoch {epoch} with loss: {val_loss / len(val_loader.dataset):.4f}"
+            )
             break
         if val_loss / len(val_loader.dataset) < best_loss:
             best_loss = val_loss / len(val_loader.dataset)
@@ -289,6 +291,11 @@ def main(args):
 
     model.freeze_cond()
 
+    if args.model_ckpt:
+        print("Loading model from checkpoint...")
+        model.load_state_dict(torch.load(args.model_ckpt))
+        print("Model loaded successfully.")
+
     train(
         device,
         model,
@@ -358,6 +365,12 @@ def parse_args():
         help="If set, the model will be tested instead of trained.",
     )
 
+    parser.add_argument(
+        "--model_ckpt",
+        type=str,
+        help="Path to the model checkpoint to resume training.",
+    )
+
     return parser.parse_args()
 
 
@@ -366,6 +379,18 @@ if __name__ == "__main__":
     print("==========================")
     print("Initializing training with the following arguments:")
     print(arguments)
+    print("--------------------------")
+    print(
+        f"Model checkpoint: {'not' if arguments.model_ckpt is None else arguments.model_ckpt} provided"
+    )
+    if arguments.model_ckpt:
+        print("Checking if model exists...")
+        if not os.path.exists(arguments.model_ckpt):
+            raise FileNotFoundError(
+                f"Model checkpoint {arguments.model_ckpt} not found."
+            )
+        else:
+            print("Model checkpoint found.")
     print("--------------------------")
     print("Device:", "cuda" if torch.cuda.is_available() else "cpu")
     print("==========================")
