@@ -389,6 +389,8 @@ if __name__ == "__main__":
             raise FileNotFoundError(
                 f"Model checkpoint {arguments.model_ckpt} not found."
             )
+        else:
+            print("Model checkpoint found.")
     print("--------------------------")
     print("Device:", "cuda" if torch.cuda.is_available() else "cpu")
     print("==========================")
