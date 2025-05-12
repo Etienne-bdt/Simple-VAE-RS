@@ -315,6 +315,8 @@ def main(args):
     for param_group in optimizer.param_groups:
         param_group["lr"] = 5e-4
 
+    model.compile(mode="reduce-overhead")
+
     train(
         device,
         model,
