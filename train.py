@@ -23,6 +23,7 @@ def train(
     gamma2,
     optimizer,
     epochs,
+    start_epoch=1,
     pretrain=False,
     bands=None,
 ):
@@ -50,7 +51,7 @@ def train(
     early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
     y, _ = next(iter(train_loader))
     _, c, h, w = y.shape
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         train_loss = 0
         tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = (0, 0, 0, 0)
@@ -149,8 +150,16 @@ def train(
             print(
                 f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}"
             )
+            # Save training data
+            save_dict = {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "gamma": gamma,
+                "gamma2": gamma2,
+            }
             torch.save(
-                model.state_dict(),
+                save_dict,
                 f"{'pre_' if pretrain else ''}best_model_{slurm_job_id}.pth",
             )
 
@@ -279,36 +288,29 @@ def main(args):
     )
     latent_size = 4096
     model = Cond_SRVAE(latent_size, args.patch_size)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    gamma = torch.tensor([1.0]).to(device)
-    gamma2 = torch.tensor([1.0]).to(device)
-    gamma.requires_grad = True
-    gamma2.requires_grad = True
-    optimizer.add_param_group({"params": [gamma, gamma2]})
-
-    model.freeze_cond()
 
     if args.model_ckpt:
         print("Loading model from checkpoint...")
-        model.load_state_dict(torch.load(args.model_ckpt))
+        save_dict = torch.load(args.model_ckpt)
+        start_epoch = save_dict["epoch"]
+        model.load_state_dict(save_dict["model_state_dict"])
         print("Model loaded successfully.")
-
-    train(
-        device,
-        model,
-        train_loader,
-        val_loader,
-        gamma,
-        gamma2,
-        optimizer,
-        epochs=args.pre_epochs,
-        pretrain=True,
-    )
-
-    model.unfreeze_cond()
+        print("Loading optimizer state...")
+        gamma = save_dict["gamma"]
+        gamma2 = save_dict["gamma2"]
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        optimizer.load_state_dict(save_dict["optimizer_state_dict"])
+        print("Optimizer state loaded successfully.")
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        start_epoch = 1
+        gamma = torch.tensor([1.0]).to(device)
+        gamma2 = torch.tensor([1.0]).to(device)
+        gamma.requires_grad = True
+        gamma2.requires_grad = True
+        optimizer.add_param_group({"params": [gamma, gamma2]})
     # Lower learning rate for the conditional part
     for param_group in optimizer.param_groups:
         param_group["lr"] = 5e-4
@@ -322,6 +324,7 @@ def main(args):
         gamma2,
         optimizer,
         epochs=args.epochs,
+        start_epoch=start_epoch,
         pretrain=False,
     )
 
