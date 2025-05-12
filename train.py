@@ -294,13 +294,14 @@ def main(args):
     if args.model_ckpt:
         print("Loading model from checkpoint...")
         save_dict = torch.load(args.model_ckpt)
-        start_epoch = save_dict["epoch"]
+        start_epoch = save_dict["epoch"] + 1
         model.load_state_dict(save_dict["model_state_dict"])
         print("Model loaded successfully.")
         print("Loading optimizer state...")
         gamma = save_dict["gamma"]
         gamma2 = save_dict["gamma2"]
         optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        optimizer.add_param_group({"params": [gamma, gamma2]})
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
