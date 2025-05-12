@@ -18,4 +18,3 @@ source activate vae-rs
 export SCRATCH="/scratch/disc/e.bardet/"
 
 python train.py --patch_size 64 --batch_size 2 --pre_epochs 0
-
