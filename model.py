@@ -131,14 +131,20 @@ class Cond_SRVAE(nn.Module):
         self.patch_size = patch_size
         self.encoder1 = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
+            nn.BatchNorm2d(128),
             nn.ReLU(),
         )
         self.fc_mu_1 = nn.Linear(patch_size**2 // 2, self.latent_size)
-        self.fc_logvar_1 = nn.Linear(patch_size**2 // 2, self.latent_size)
+        self.fc_logvar_1 = nn.Sequential(
+            nn.Linear(patch_size**2 // 2, self.latent_size),
+            nn.Hardtanh(-7, 7),
+        )
         self.fc_decode_y = nn.Linear(self.latent_size, patch_size**2 // 2)
         self.decoder_1 = nn.Sequential(
             nn.ConvTranspose2d(
@@ -157,14 +163,20 @@ class Cond_SRVAE(nn.Module):
 
         self.encoder2 = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
+            nn.BatchNorm2d(128),
             nn.ReLU(),
         )
         self.fc_mu_2 = nn.Linear(2 * patch_size**2, self.latent_size)
-        self.fc_logvar_2 = nn.Linear(2 * patch_size**2, self.latent_size)
+        self.fc_logvar_2 = nn.Sequential(
+            nn.Linear(2 * patch_size**2, self.latent_size),
+            nn.Hardtanh(-7, 7),
+        )
         self.fc_decode_x = nn.Linear(self.latent_size, 2 * patch_size**2)
         self.decoder_2 = nn.Sequential(
             nn.ConvTranspose2d(
@@ -176,11 +188,11 @@ class Cond_SRVAE(nn.Module):
             ),  # 64 input channels
             nn.ReLU(),
             nn.ConvTranspose2d(
-                32, 4, kernel_size=3, stride=1, padding=1
+                32, 32, kernel_size=3, stride=1, padding=1
             ),  # 32 input channels
         )
         self.decoder_hf = nn.Sequential(
-            nn.ConvTranspose2d(8, 16, kernel_size=3, stride=1, padding=1),
+            nn.ConvTranspose2d(36, 16, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
@@ -190,17 +202,23 @@ class Cond_SRVAE(nn.Module):
 
         self.y_to_z = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(patch_size**2 // 2, self.latent_size // 2),
         )
         self.u_to_z = nn.Linear(self.latent_size, self.latent_size // 2)
         self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
-        self.logvar_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
+        self.logvar_u_y_to_z = nn.Sequential(
+            nn.Linear(self.latent_size, self.latent_size),
+            nn.Hardtanh(-7, 7),
+        )
 
     def z_cond(self, y, u):
         # Define the encoder part of the VAE
