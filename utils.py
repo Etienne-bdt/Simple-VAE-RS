@@ -1,4 +1,9 @@
+import lpips
 import torch
+import torch.nn.functional as F
+from skimage.metrics import structural_similarity as ssim
+from torch.utils.tensorboard.writer import SummaryWriter
+from tqdm import tqdm
 
 
 def normalize_image(image: torch.Tensor) -> torch.Tensor:
@@ -58,3 +63,107 @@ class EarlyStopper:
             if self.counter >= self.patience:
                 return True
         return False
+
+
+class SrEvaluator:
+    """
+    Class to evaluate the performance of the super-resolution (SR) model.
+    Args:
+        y_val (torch.Tensor): Low-resolution images.
+        x_val (torch.Tensor): High-resolution images.
+        writer (SummaryWriter): TensorBoard writer.
+        start_epoch (int): Current epoch number.
+    """
+
+    def __init__(self, val_loader, start_epoch):
+        """
+        Initialize the SR_Evaluator class.
+        """
+        self.val_loader = val_loader
+        self.writer = SummaryWriter()
+        self.start_epoch = start_epoch
+        self.lpips_loss = lpips.LPIPS(net="alex").cuda()
+        self.ssim = ssim
+        self.compute_baseline()
+
+    def compute_baseline(self):
+        """
+        Compute and log the baseline images for the SR task.
+        Args:
+            y_val (torch.Tensor): Low-resolution images.
+            x_val (torch.Tensor): High-resolution images.
+            writer (SummaryWriter): TensorBoard writer.
+            start_epoch (int): Current epoch number.
+        """
+        y_val, x_val = next(reversed(list(self.val_loader)))
+        hr_interp = F.interpolate(y_val[:4], scale_factor=2, mode="bicubic")
+        self.writer.add_images(
+            "Conditional Generation/HR Interpolated",
+            hr_interp,
+            global_step=self.start_epoch,
+            dataformats="NCHW",
+        )
+
+        self.writer.add_images(
+            "Conditional Generation/HR_Original",
+            x_val[:4, [2, 1, 0], :, :],
+            global_step=self.start_epoch,
+            dataformats="NCHW",
+        )
+        self.writer.add_images(
+            "Conditional Generation/LR_Original",
+            y_val[:4, [2, 1, 0], :, :],
+            global_step=self.start_epoch,
+            dataformats="NCHW",
+        )
+        ssim_cumu, lpips_cumu = 0, 0
+        for _, batch in tqdm(enumerate(self.val_loader)):
+            y_val, x_val = batch
+            y_val = y_val.cuda()
+            x_val = x_val.cuda()
+
+            hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
+
+            # Compute SSIM and LPIPS scores
+            ssim, lpips = self.compute_metrics(hr_interp, x_val)
+            ssim_cumu += ssim
+            lpips_cumu += lpips
+        self.ssim_val = ssim_cumu / len(self.val_loader)
+        self.lpips_val = lpips_cumu / len(self.val_loader)
+
+    def compute_metrics(self, pred, gt):
+        """
+        Compute and log the metrics for the SR task.
+        Args:
+            y_val (torch.Tensor): Low-resolution images.
+            x_val (torch.Tensor): High-resolution images.
+            writer (SummaryWriter): TensorBoard writer.
+            start_epoch (int): Current epoch number.
+        """
+        ssim_score = self.ssim(
+            pred.permute(0, 2, 3, 1).cpu().numpy(),
+            gt.permute(0, 2, 3, 1).cpu().numpy(),
+            multichannel=True,
+        )
+        ssim_score = torch.tensor(ssim_score).mean()
+        lpips_score = self.lpips_loss(
+            pred.permute(0, 2, 3, 1).cuda(),
+            gt.permute(0, 2, 3, 1).cuda(),
+        )
+        lpips_score = lpips_score.mean()
+        return ssim_score, lpips_score
+
+    def log_images(self, img, category, epoch):
+        """
+        Log the images to TensorBoard.
+        Args:
+            img (torch.Tensor): Image tensor to log.
+            category (str): Category of the image.
+            epoch (int): Current epoch number.
+        """
+        self.writer.add_images(
+            category,
+            img[:4, [2, 1, 0], :, :],
+            global_step=epoch,
+            dataformats="NCHW",
+        )
