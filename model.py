@@ -1,8 +1,5 @@
-import lightning as L
 import torch
 import torch.nn as nn
-
-from loss import cond_loss, loss_function
 
 
 class VAE(nn.Module):
@@ -70,58 +67,6 @@ class VAE(nn.Module):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
-
-
-class VAE_Lightning(L.LightningModule):
-    def __init__(self, latent_size):
-        super(VAE_Lightning, self).__init__()
-        self.model = VAE(latent_size)
-        self.gamma = torch.nn.Parameter(torch.ones(1), requires_grad=True)
-
-    def training_step(self, batch, batch_idx):
-        _, data = batch
-        recon_batch, mu, logvar = self.model(data)
-        mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
-        loss = mse + kld
-        values = {"loss": loss, "mse": mse, "kld": kld}
-        self.log_dict(
-            values, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True
-        )
-        self.log(
-            "grad_norm", self._compute_grad_norm(), prog_bar=True
-        )  # Log gradient norm
-        return loss
-
-    def _compute_grad_norm(self):
-        total_norm = 0
-        for p in self.model.parameters():
-            if p.grad is not None:
-                param_norm = p.grad.data.norm(2)
-                total_norm += param_norm.item() ** 2
-        return total_norm**0.5
-
-    def validation_step(self, batch, batch_idx):
-        _, data = batch
-        recon_batch, mu, logvar = self.model(data)
-        mse, kld = loss_function(recon_batch, data, mu, logvar, self.gamma)
-        loss = mse + kld
-        values = {
-            "val_loss": loss,
-            "val_mse": mse,
-            "val_kld": kld,
-            "gamma": self.gamma.item(),
-        }
-        self.log_dict(values, on_epoch=True, on_step=False, sync_dist=True)
-        return loss
-
-    def on_train_end(self) -> None:
-        print(f"Final gamma value: {self.gamma.item()}")
-        return super().on_train_end()
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
-        optimizer.add_param_group({"params": self.gamma})
-        return optimizer
 
 
 class Cond_SRVAE(nn.Module):
@@ -329,83 +274,6 @@ class Cond_SRVAE(nn.Module):
             param.requires_grad = True
         for param in self.y_to_z.parameters():
             param.requires_grad = True
-
-
-class Cond_SRVAE_Lightning(L.LightningModule):
-    def __init__(self, latent_size):
-        super(Cond_SRVAE_Lightning, self).__init__()
-        self.model = Cond_SRVAE(latent_size)
-        self.gamma = torch.nn.Parameter(torch.ones(1), requires_grad=True)
-
-    def training_step(self, batch, batch_idx):
-        y, x = batch
-        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self.model(
-            x, y
-        )
-        mse_x, kld_u, mse_y, kld_z = cond_loss(
-            x_hat,
-            x,
-            y_hat,
-            y,
-            mu_u,
-            logvar_u,
-            mu_z,
-            logvar_z,
-            mu_z_uy,
-            logvar_z_uy,
-            self.gamma,
-        )
-        loss = mse_x + kld_u + mse_y + kld_z
-        values = {
-            "loss": loss,
-            "mse_x": mse_x,
-            "kld_u": kld_u,
-            "mse_y": mse_y,
-            "kld_z": kld_z,
-            "logvar_z": logvar_z.mean(),
-            "logvar_z_uy": logvar_z_uy.mean(),
-            "mu_z_uy": mu_z_uy.mean(),
-            "mu_z": mu_z.mean(),
-        }
-        self.log_dict(
-            values, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
-        )
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        y, x = batch
-        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self.model(
-            x, y
-        )
-        mse_x, kld_u, mse_y, kld_z = cond_loss(
-            x_hat,
-            x,
-            y_hat,
-            y,
-            mu_u,
-            logvar_u,
-            mu_z,
-            logvar_z,
-            mu_z_uy,
-            logvar_z_uy,
-            self.gamma,
-        )
-        loss = mse_x + kld_u + mse_y + kld_z
-        values = {
-            "val_loss": loss,
-            "val_mse_x": mse_x,
-            "val_kld_u": kld_u,
-            "val_mse_y": mse_y,
-            "val_kld_z": kld_z,
-            "gamma": self.gamma.item(),
-        }
-        self.log_dict(values, on_epoch=True, on_step=True, sync_dist=True)
-        return loss
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
-        optimizer.add_param_group({"params": self.gamma})
-        return optimizer
 
 
 if __name__ == "__main__":
