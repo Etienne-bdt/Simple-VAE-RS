@@ -9,6 +9,7 @@ dependencies:
   - matplotlib
   - polars
   - pre-commit
+  - lpips
   - scikit-image
   - pip
   - pip:
