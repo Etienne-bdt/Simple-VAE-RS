@@ -94,10 +94,10 @@ class SrEvaluator:
             start_epoch (int): Current epoch number.
         """
         y_val, x_val = next(reversed(list(self.val_loader)))
-        hr_interp = F.interpolate(y_val[:4], scale_factor=2, mode="bicubic")
+        hr_interp = F.interpolate(y_val[:4, :, :, :], scale_factor=2, mode="bicubic")
         self.writer.add_images(
             "Conditional Generation/HR Interpolated",
-            hr_interp,
+            hr_interp[:, [2, 1, 0], :, :],
             global_step=self.start_epoch,
             dataformats="NCHW",
         )
@@ -136,12 +136,20 @@ class SrEvaluator:
             writer (SummaryWriter): TensorBoard writer.
             start_epoch (int): Current epoch number.
         """
-        ssim_score = self.ssim(
-            pred.permute(0, 2, 3, 1).cpu().numpy(),
-            gt.permute(0, 2, 3, 1).cpu().numpy(),
-            multichannel=True,
-        )
-        ssim_score = torch.tensor(ssim_score).mean()
+        ssim_score = 0
+        for p, g in zip(pred, gt):
+            ssim_s = self.ssim(
+                p.cpu().numpy(),
+                g.cpu().numpy(),
+                win_size=11,
+                data_range=1,
+                channel_axis=0,
+                gradient=False,
+                full=False,
+            )
+            ssim_score += ssim_s
+        ssim_score = ssim_score / len(pred)
+        ssim_score = torch.tensor(ssim_score)
         return ssim_score
 
     def log_images(self, img, category, epoch):
