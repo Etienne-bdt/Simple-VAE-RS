@@ -44,7 +44,6 @@ def train(
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
-    # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
     early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
     print("Computing baseline...")
