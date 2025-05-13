@@ -1,4 +1,3 @@
-import lpips
 import torch
 import torch.nn.functional as F
 from skimage.metrics import structural_similarity as ssim
@@ -82,7 +81,6 @@ class SrEvaluator:
         self.val_loader = val_loader
         self.writer = SummaryWriter()
         self.start_epoch = start_epoch
-        self.lpips_loss = lpips.LPIPS(net="alex").cuda()
         self.ssim = ssim
         self.compute_baseline()
 
@@ -116,7 +114,7 @@ class SrEvaluator:
             global_step=self.start_epoch,
             dataformats="NCHW",
         )
-        ssim_cumu, lpips_cumu = 0, 0
+        ssim_cumu = 0
         for _, batch in tqdm(enumerate(self.val_loader)):
             y_val, x_val = batch
             y_val = y_val.cuda()
@@ -125,11 +123,9 @@ class SrEvaluator:
             hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
 
             # Compute SSIM and LPIPS scores
-            ssim, lpips = self.compute_metrics(hr_interp, x_val)
+            ssim = self.compute_metrics(hr_interp, x_val)
             ssim_cumu += ssim
-            lpips_cumu += lpips
         self.ssim_val = ssim_cumu / len(self.val_loader)
-        self.lpips_val = lpips_cumu / len(self.val_loader)
 
     def compute_metrics(self, pred, gt):
         """
@@ -146,12 +142,7 @@ class SrEvaluator:
             multichannel=True,
         )
         ssim_score = torch.tensor(ssim_score).mean()
-        lpips_score = self.lpips_loss(
-            pred.permute(0, 2, 3, 1).cuda(),
-            gt.permute(0, 2, 3, 1).cuda(),
-        )
-        lpips_score = lpips_score.mean()
-        return ssim_score, lpips_score
+        return ssim_score
 
     def log_images(self, img, category, epoch):
         """

@@ -109,13 +109,11 @@ def train(
         )
 
         val_loss = 0
-        val_recon_ssim_lr, val_recon_lpips_lr, val_recon_ssim_hr, val_recon_lpips_hr = (
-            0,
-            0,
+        val_recon_ssim_lr, val_recon_ssim_hr = (
             0,
             0,
         )
-        val_tot_ssim, val_tot_lpips = 0, 0
+        val_tot_ssim = 0
         val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
         model.eval()
         with torch.no_grad():
@@ -152,23 +150,16 @@ def train(
                 )
                 val_loss += v_loss.item()
                 conditional_gen = model.conditional_generation(y)
-                ssim, lpips = eval.compute_metrics(conditional_gen, x)
-                val_tot_ssim, val_tot_lpips = (
-                    val_tot_ssim + ssim.item(),
-                    val_tot_lpips + lpips.item(),
-                )
-                ssim_lr, lpips_lr = eval.compute_metrics(y_hat, y)
-                ssim_hr, lpips_hr = eval.compute_metrics(x_hat, x)
+                ssim = eval.compute_metrics(conditional_gen, x)
+                val_tot_ssim = val_tot_ssim + ssim.item()
+                ssim_lr = eval.compute_metrics(y_hat, y)
+                ssim_hr = eval.compute_metrics(x_hat, x)
                 (
                     val_recon_ssim_lr,
-                    val_recon_lpips_lr,
                     val_recon_ssim_hr,
-                    val_recon_lpips_hr,
                 ) = (
                     val_recon_ssim_lr + ssim_lr.item(),
-                    val_recon_lpips_lr + lpips_lr.item(),
                     val_recon_ssim_hr + ssim_hr.item(),
-                    val_recon_lpips_hr + lpips_hr.item(),
                 )
 
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
@@ -257,15 +248,6 @@ def train(
                 "Recon_LR": val_recon_ssim_lr / len(val_loader.dataset),
                 "Recon_HR": val_recon_ssim_hr / len(val_loader.dataset),
                 "SR": val_tot_ssim / len(val_loader.dataset),
-            },
-            epoch,
-        )
-        writer.add_scalars(
-            "Metrics/LPIPS",
-            {
-                "Recon_LR": val_recon_lpips_lr / len(val_loader.dataset),
-                "Recon_HR": val_recon_lpips_hr / len(val_loader.dataset),
-                "SR": val_tot_lpips / len(val_loader.dataset),
             },
             epoch,
         )
