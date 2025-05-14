@@ -252,7 +252,7 @@ def train(
             },
             epoch,
         )
-        if kwargs["val_metrics_every"] == 0:
+        if epoch % kwargs["val_metrics_every"] == 0:
             writer.add_scalars(
                 "Metrics/SSIM",
                 {
