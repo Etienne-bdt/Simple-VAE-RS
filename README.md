@@ -8,4 +8,5 @@ Its short to mid-term prospect is to quantify uncertainties on the super resolut
 ## Particularities
 
 For now, the code is modified to use Gaussian priors and decoders for simplicity.
-*__Note__*: In grid mode, the batch size depends on the crop size (using a 64 crop)
+
+*__Note__*: In grid mode, the batch size depends on the crop size (using a 64px\*64px crop, it yields 16 patches for one 256 image so a batch is 16\*batch_size)
