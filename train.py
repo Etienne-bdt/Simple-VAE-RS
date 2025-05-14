@@ -202,14 +202,14 @@ def train(
         # Log reconstruction and Conditional generation
 
         evaluator.log_images(
-            y_hat.view(-1, c, h, w)[:4, bands, :, :], "Reconstruction/LR", epoch
+            y_hat.view(-1, c, h, w)[:4, :, :, :], "Reconstruction/LR", epoch
         )
         evaluator.log_images(
-            x_hat.view(-1, c, h * 2, w * 2)[:4, bands, :, :], "Reconstruction/HR", epoch
+            x_hat.view(-1, c, h * 2, w * 2)[:4, :, :, :], "Reconstruction/HR", epoch
         )
         if not pretrain:
             evaluator.log_images(
-                conditional_gen.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
+                conditional_gen.view(-1, c, h * 2, w * 2)[:4, :, :, :],
                 "Conditional Generation/HR",
                 epoch,
             )
