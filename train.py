@@ -3,15 +3,13 @@ import os
 import time
 
 import torch
-import torch.nn.functional as F
-from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
 
 from dataset import init_dataloader
 from loss import cond_loss
 from model import Cond_SRVAE
 from test import test
-from utils import EarlyStopper
+from utils import EarlyStopper, SrEvaluator
 
 
 def train(
@@ -26,6 +24,7 @@ def train(
     start_epoch=1,
     pretrain=False,
     bands=None,
+    **kwargs,
 ):
     """
     Training script for the Conditional SRVAE model.
@@ -46,11 +45,19 @@ def train(
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
-    writer = SummaryWriter()  # Initialize TensorBoard writer
     best_loss = float("inf")  # Initialize best loss to infinity
     early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
-    y, _ = next(iter(train_loader))
-    _, c, h, w = y.shape
+    print("Computing baseline...")
+    evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
+    writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
+
+    print("Baseline computed.")
+    y_val, x_val = next(reversed(list(val_loader)))
+    _, c, h, w = y_val.shape
+
+    evaluator.log_images(y_val[:4, bands, :, :], "Reconstruction/LR_Original", 0)
+    evaluator.log_images(x_val[:4, bands, :, :], "Reconstruction/HR_Original", 0)
+
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         train_loss = 0
@@ -102,6 +109,13 @@ def train(
         )
 
         val_loss = 0
+        val_recon_ssim_lr, val_recon_lpips_lr, val_recon_ssim_hr, val_recon_lpips_hr = (
+            0,
+            0,
+            0,
+            0,
+        )
+        val_tot_ssim, val_tot_lpips = 0, 0
         val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
         model.eval()
         with torch.no_grad():
@@ -137,6 +151,26 @@ def train(
                     val_tot_mse_y + v_mse_y.item(),
                 )
                 val_loss += v_loss.item()
+                if epoch % kwargs["val_metrics_every"] == 0:
+                    conditional_gen = model.conditional_generation(y)
+                    ssim, lpips = evaluator.compute_metrics(conditional_gen, x)
+                    val_tot_ssim, val_tot_lpips = (
+                        val_tot_ssim + ssim.item(),
+                        val_tot_lpips + lpips,
+                    )
+                    ssim_lr, lpips_lr = evaluator.compute_metrics(y_hat, y)
+                    ssim_hr, lpips_hr = evaluator.compute_metrics(x_hat, x)
+                    (
+                        val_recon_ssim_lr,
+                        val_recon_lpips_lr,
+                        val_recon_ssim_hr,
+                        val_recon_lpips_hr,
+                    ) = (
+                        val_recon_ssim_lr + ssim_lr.item(),
+                        val_recon_lpips_lr + lpips_lr,
+                        val_recon_ssim_hr + ssim_hr.item(),
+                        val_recon_lpips_hr + lpips_hr,
+                    )
 
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
@@ -165,66 +199,18 @@ def train(
 
         # Log reconstruction and Conditional generation
 
-        writer.add_images(
-            "Reconstruction/LR_Original",
-            y.view(-1, c, h, w)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
+        evaluator.log_images(
+            y_hat.view(-1, c, h, w)[:4, bands, :, :], "Reconstruction/LR", epoch
         )
-
-        writer.add_images(
-            "Reconstruction/LR",
-            y_hat.view(-1, c, h, w)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
+        evaluator.log_images(
+            x_hat.view(-1, c, h * 2, w * 2)[:4, bands, :, :], "Reconstruction/HR", epoch
         )
-
         if not pretrain:
-            conditional_gen = model.conditional_generation(y)
-            writer.add_images(
-                "Conditional Generation/LR_Original",
-                y.view(-1, c, h, w)[:4, bands, :, :],
-                global_step=epoch,
-                dataformats="NCHW",
-            )
-
-            writer.add_images(
-                "Conditional Generation/HR",
+            evaluator.log_images(
                 conditional_gen.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
-                global_step=epoch,
-                dataformats="NCHW",
+                "Conditional Generation/HR",
+                epoch,
             )
-
-            writer.add_images(
-                "Conditional Generation/HR_Original",
-                x.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
-                global_step=epoch,
-                dataformats="NCHW",
-            )
-
-            writer.add_images(
-                "Conditional Generation/HR_Interpolation",
-                F.interpolate(
-                    y.view(-1, c, h, w)[:4, bands, :, :], scale_factor=2, mode="bicubic"
-                ),
-                global_step=epoch,
-                dataformats="NCHW",
-            )
-
-        writer.add_images(
-            "Reconstruction/HR_Original",
-            x.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
-        )
-
-        writer.add_images(
-            "Reconstruction/HR",
-            x_hat.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
-            global_step=epoch,
-            dataformats="NCHW",
-        )
-
         # Log to TensorBoard
         writer.add_scalars(
             "Loss/KLD_u",
@@ -266,6 +252,26 @@ def train(
             },
             epoch,
         )
+        if epoch % kwargs["val_metrics_every"] == 0:
+            writer.add_scalars(
+                "Metrics/SSIM",
+                {
+                    "Recon_LR": val_recon_ssim_lr / len(val_loader.dataset),
+                    "Recon_HR": val_recon_ssim_hr / len(val_loader.dataset),
+                    "SR": val_tot_ssim / len(val_loader.dataset),
+                },
+                epoch,
+            )
+            writer.add_scalars(
+                "Metrics/LPIPS",
+                {
+                    "Recon_LR": val_recon_lpips_lr / len(val_loader.dataset),
+                    "Recon_HR": val_recon_lpips_hr / len(val_loader.dataset),
+                    "SR": val_tot_lpips / len(val_loader.dataset),
+                },
+                epoch,
+            )
+
         writer.add_scalars(
             "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
         )
@@ -316,18 +322,19 @@ def main(args):
     for param_group in optimizer.param_groups:
         param_group["lr"] = 5e-4
 
-    train(
-        device,
-        model,
-        train_loader,
-        val_loader,
-        gamma,
-        gamma2,
-        optimizer,
-        epochs=args.epochs,
-        start_epoch=start_epoch,
-        pretrain=False,
-    )
+    if not (args.test and args.model_ckpt):
+        train(
+            device,
+            model,
+            train_loader,
+            val_loader,
+            gamma,
+            gamma2,
+            optimizer,
+            epochs=args.epochs,
+            start_epoch=start_epoch,
+            pretrain=False,
+        )
 
     test(device, model, val_loader)
 
@@ -373,6 +380,13 @@ def parse_args():
         "--model_ckpt",
         type=str,
         help="Path to the model checkpoint to resume training.",
+    )
+
+    parser.add_argument(
+        "--val_metrics_every",
+        type=int,
+        default=5,
+        help="Number of epochs between validation metrics computation.",
     )
 
     return parser.parse_args()

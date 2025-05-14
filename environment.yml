@@ -9,8 +9,10 @@ dependencies:
   - matplotlib
   - polars
   - pre-commit
+  - scikit-image
   - pip
   - pip:
       - torch
       - tensorboard
       - standard-imghdr
+      - lpips
