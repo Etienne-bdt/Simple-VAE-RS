@@ -89,13 +89,10 @@ class SrEvaluator:
     def compute_baseline(self):
         """
         Compute and log the baseline images for the SR task.
-        Args:
-            y_val (torch.Tensor): Low-resolution images.
-            x_val (torch.Tensor): High-resolution images.
-            writer (SummaryWriter): TensorBoard writer.
-            start_epoch (int): Current epoch number.
         """
-        y_val, x_val = next(reversed(list(self.val_loader)))
+        for _batch in self.val_loader:
+            pass
+        y_val, x_val = _batch
         hr_interp = F.interpolate(y_val[:4, :, :, :], scale_factor=2, mode="bicubic")
         self.writer.add_images(
             "Conditional Generation/HR Interpolated",
@@ -135,10 +132,8 @@ class SrEvaluator:
         """
         Compute and log the metrics for the SR task.
         Args:
-            y_val (torch.Tensor): Low-resolution images.
-            x_val (torch.Tensor): High-resolution images.
-            writer (SummaryWriter): TensorBoard writer.
-            start_epoch (int): Current epoch number.
+            pred (torch.Tensor): Predicted images (A batch).
+            gt (torch.Tensor): Ground truth images (A batch).
         """
         ssim_score, lpips_score = 0, 0
         for p, g in zip(pred, gt):
