@@ -52,7 +52,9 @@ def train(
     writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
 
     print("Baseline computed.")
-    y_val, x_val = next(reversed(list(val_loader)))
+    for _batch in val_loader:
+        pass
+    y_val, x_val = _batch
     _, c, h, w = y_val.shape
 
     evaluator.log_images(y_val[:4, bands, :, :], "Reconstruction/LR_Original", 0)
