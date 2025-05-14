@@ -1,3 +1,5 @@
+import os
+
 import lpips
 import torch
 import torch.nn.functional as F
@@ -114,19 +116,32 @@ class SrEvaluator:
             dataformats="NCHW",
         )
         ssim_cumu, lpips_cumu = 0, 0
-        for _, batch in tqdm(enumerate(self.val_loader)):
-            y_val, x_val = batch
-            y_val = y_val.cuda()
-            x_val = x_val.cuda()
+        if not os.path.exists("baseline_ckpt.pth"):
+            for _, batch in tqdm(enumerate(self.val_loader)):
+                y_val, x_val = batch
+                y_val = y_val.cuda()
+                x_val = x_val.cuda()
 
-            hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
+                hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
 
-            # Compute SSIM and LPIPS scores
-            ssim, lpips = self.compute_metrics(hr_interp, x_val)
-            ssim_cumu += ssim
-            lpips_cumu += lpips
-        self.ssim_base = ssim_cumu / len(self.val_loader)
-        self.lpips_base = lpips_cumu / len(self.val_loader)
+                # Compute SSIM and LPIPS scores
+                ssim, lpips = self.compute_metrics(hr_interp, x_val)
+                ssim_cumu += ssim
+                lpips_cumu += lpips
+            self.ssim_base = ssim_cumu / len(self.val_loader)
+            self.lpips_base = lpips_cumu / len(self.val_loader)
+            torch.save(
+                {
+                    "ssim_base": self.ssim_base,
+                    "lpips_base": self.lpips_base,
+                },
+                "baseline_ckpt.pth",
+            )
+        else:
+            checkpoint = torch.load("baseline_ckpt.pth")
+            self.ssim_base = checkpoint["ssim_base"]
+            self.lpips_base = checkpoint["lpips_base"]
+            print(f"SSIM Baseline: {self.ssim_base}, LPIPS Baseline: {self.lpips_base}")
 
     def compute_metrics(self, pred, gt):
         """
