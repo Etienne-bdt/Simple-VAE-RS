@@ -5,7 +5,7 @@
 #SBATCH --job-name=Conditionnal_VAE
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu02
 #SBATCH --nodelist=gpu02
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1

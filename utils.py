@@ -140,7 +140,7 @@ class SrEvaluator:
             writer (SummaryWriter): TensorBoard writer.
             start_epoch (int): Current epoch number.
         """
-        ssim_score = 0
+        ssim_score, lpips_score = 0, 0
         for p, g in zip(pred, gt):
             ssim_s = self.ssim(
                 p.cpu().numpy(),
@@ -151,14 +151,16 @@ class SrEvaluator:
                 gradient=False,
                 full=False,
             )
+            lpips_s = self.lpips_loss(
+                p[[2, 1, 0], :, :].cuda(),
+                g[[2, 1, 0], :, :].cuda(),
+            )
+            lpips_score += lpips_s
             ssim_score += ssim_s
-        ssim_score = ssim_score / len(pred)
-        ssim_score = torch.tensor(ssim_score)
-        lpips_score = self.lpips_loss(
-            pred.permute(0, 2, 3, 1).cuda(),
-            gt.permute(0, 2, 3, 1).cuda(),
-        )
-        lpips_score = lpips_score.mean()
+        ssim_score = ssim_score
+        ssim_score = torch.tensor(ssim_score) / len(pred)
+
+        lpips_score = lpips_score / len(gt)
         return ssim_score, lpips_score
 
     def log_images(self, img, category, epoch):

@@ -24,6 +24,7 @@ def train(
     start_epoch=1,
     pretrain=False,
     bands=None,
+    **kwargs,
 ):
     """
     Training script for the Conditional SRVAE model.
@@ -150,25 +151,26 @@ def train(
                     val_tot_mse_y + v_mse_y.item(),
                 )
                 val_loss += v_loss.item()
-                conditional_gen = model.conditional_generation(y)
-                ssim, lpips = eval.compute_metrics(conditional_gen, x)
-                val_tot_ssim, val_tot_lpips = (
-                    val_tot_ssim + ssim.item(),
-                    val_tot_lpips + lpips.item(),
-                )
-                ssim_lr, lpips_lr = eval.compute_metrics(y_hat, y)
-                ssim_hr, lpips_hr = eval.compute_metrics(x_hat, x)
-                (
-                    val_recon_ssim_lr,
-                    val_recon_lpips_lr,
-                    val_recon_ssim_hr,
-                    val_recon_lpips_hr,
-                ) = (
-                    val_recon_ssim_lr + ssim_lr.item(),
-                    val_recon_lpips_lr + lpips_lr.item(),
-                    val_recon_ssim_hr + ssim_hr.item(),
-                    val_recon_lpips_hr + lpips_hr.item(),
-                )
+                if epoch % kwargs["val_metrics_every"] == 0:
+                    conditional_gen = model.conditional_generation(y)
+                    ssim, lpips = eval.compute_metrics(conditional_gen, x)
+                    val_tot_ssim, val_tot_lpips = (
+                        val_tot_ssim + ssim.item(),
+                        val_tot_lpips + lpips,
+                    )
+                    ssim_lr, lpips_lr = eval.compute_metrics(y_hat, y)
+                    ssim_hr, lpips_hr = eval.compute_metrics(x_hat, x)
+                    (
+                        val_recon_ssim_lr,
+                        val_recon_lpips_lr,
+                        val_recon_ssim_hr,
+                        val_recon_lpips_hr,
+                    ) = (
+                        val_recon_ssim_lr + ssim_lr.item(),
+                        val_recon_lpips_lr + lpips_lr,
+                        val_recon_ssim_hr + ssim_hr.item(),
+                        val_recon_lpips_hr + lpips_hr,
+                    )
 
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
@@ -250,24 +252,25 @@ def train(
             },
             epoch,
         )
-        writer.add_scalars(
-            "Metrics/SSIM",
-            {
-                "Recon_LR": val_recon_ssim_lr / len(val_loader.dataset),
-                "Recon_HR": val_recon_ssim_hr / len(val_loader.dataset),
-                "SR": val_tot_ssim / len(val_loader.dataset),
-            },
-            epoch,
-        )
-        writer.add_scalars(
-            "Metrics/LPIPS",
-            {
-                "Recon_LR": val_recon_lpips_lr / len(val_loader.dataset),
-                "Recon_HR": val_recon_lpips_hr / len(val_loader.dataset),
-                "SR": val_tot_lpips / len(val_loader.dataset),
-            },
-            epoch,
-        )
+        if kwargs["val_metrics_every"] == 0:
+            writer.add_scalars(
+                "Metrics/SSIM",
+                {
+                    "Recon_LR": val_recon_ssim_lr / len(val_loader.dataset),
+                    "Recon_HR": val_recon_ssim_hr / len(val_loader.dataset),
+                    "SR": val_tot_ssim / len(val_loader.dataset),
+                },
+                epoch,
+            )
+            writer.add_scalars(
+                "Metrics/LPIPS",
+                {
+                    "Recon_LR": val_recon_lpips_lr / len(val_loader.dataset),
+                    "Recon_HR": val_recon_lpips_hr / len(val_loader.dataset),
+                    "SR": val_tot_lpips / len(val_loader.dataset),
+                },
+                epoch,
+            )
 
         writer.add_scalars(
             "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
@@ -377,6 +380,13 @@ def parse_args():
         "--model_ckpt",
         type=str,
         help="Path to the model checkpoint to resume training.",
+    )
+
+    parser.add_argument(
+        "--val_metrics_every",
+        type=int,
+        default=5,
+        help="Number of epochs between validation metrics computation.",
     )
 
     return parser.parse_args()
