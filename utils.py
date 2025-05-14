@@ -125,8 +125,8 @@ class SrEvaluator:
             ssim, lpips = self.compute_metrics(hr_interp, x_val)
             ssim_cumu += ssim
             lpips_cumu += lpips
-        self.ssim_val = ssim_cumu / len(self.val_loader)
-        self.lpips_val = lpips_cumu / len(self.val_loader)
+        self.ssim_base = ssim_cumu / len(self.val_loader)
+        self.lpips_base = lpips_cumu / len(self.val_loader)
 
     def compute_metrics(self, pred, gt):
         """
@@ -153,9 +153,9 @@ class SrEvaluator:
             lpips_score += lpips_s
             ssim_score += ssim_s
         ssim_score = ssim_score
-        ssim_score = torch.tensor(ssim_score) / len(pred)
+        ssim_score = torch.tensor(ssim_score)
 
-        lpips_score = lpips_score / len(gt)
+        lpips_score = lpips_score
         return ssim_score, lpips_score
 
     def log_images(self, img, category, epoch):

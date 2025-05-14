@@ -122,7 +122,7 @@ class Cond_SRVAE(nn.Module):
             nn.Linear(2 * patch_size**2, self.latent_size),
             nn.Hardtanh(-7, 7),
         )
-        self.fc_decode_x = nn.Linear(self.latent_size, 2 * patch_size**2)
+        self.fc_decode_x = nn.Linear(self.latent_size * 2, 2 * patch_size**2)
         self.decoder_2 = nn.Sequential(
             nn.ConvTranspose2d(
                 128, 64, kernel_size=4, stride=2, padding=1
@@ -135,9 +135,32 @@ class Cond_SRVAE(nn.Module):
             nn.ConvTranspose2d(
                 32, 32, kernel_size=3, stride=1, padding=1
             ),  # 32 input channels
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
+            nn.Sigmoid(),
         )
+        """
         self.decoder_hf = nn.Sequential(
             nn.ConvTranspose2d(36, 16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
+            nn.Sigmoid(),
+        )
+        """
+        self.decoder_hf = nn.Sequential(
+            nn.ConvTranspose2d(36, 32, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 32, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 32, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
@@ -156,12 +179,12 @@ class Cond_SRVAE(nn.Module):
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(patch_size**2 // 2, self.latent_size // 2),
+            nn.Linear(patch_size**2 // 2, self.latent_size),
         )
-        self.u_to_z = nn.Linear(self.latent_size, self.latent_size // 2)
-        self.mu_u_y_to_z = nn.Linear(self.latent_size, self.latent_size)
+        self.u_to_z = nn.Linear(self.latent_size, self.latent_size)
+        self.mu_u_y_to_z = nn.Linear(self.latent_size * 2, self.latent_size)
         self.logvar_u_y_to_z = nn.Sequential(
-            nn.Linear(self.latent_size, self.latent_size),
+            nn.Linear(self.latent_size * 2, self.latent_size),
             nn.Hardtanh(-7, 7),
         )
 
@@ -209,11 +232,11 @@ class Cond_SRVAE(nn.Module):
         return y
 
     def decode_x(self, z, y):
-        z = self.fc_decode_x(z)
-        z = z.view(z.size(0), 128, self.patch_size // 8, self.patch_size // 8)
-        z_carac = self.decoder_2(z)
-        stack = torch.cat((y, z_carac), dim=1)
-        return self.decoder_hf(stack)
+        y_enc = self.y_to_z(y)
+        stack = torch.cat((y_enc, z), dim=1)
+        z = self.fc_decode_x(stack)
+        z = z.view(y.size(0), 128, self.patch_size // 8, self.patch_size // 8)
+        return self.decoder_2(z)
 
     def forward(self, x, y):
         mu_u, logvar_u = self.encode_y(y)
@@ -240,7 +263,7 @@ class Cond_SRVAE(nn.Module):
         x_hat = self.decode_x(z, y)
         return x_hat
 
-    def sample(self, y, samples=1000):
+    def sample(self, y, samples=1000) -> torch.Tensor:
         # Generate samples from the model
         mu_u, logvar_u = self.encode_y(y)
         u = self.reparameterize(mu_u, logvar_u)
@@ -249,9 +272,14 @@ class Cond_SRVAE(nn.Module):
 
         std = torch.exp(0.5 * logvar_z_uy)
         latent = std.size(1)
-        eps = torch.randn((samples, latent)).to(std.device)
+        eps = torch.randn((samples, latent)).to(y.device)
 
         z = mu_z_uy + eps * std
+
+        if y.ndim == 3:
+            y = y.unsqueeze(0)
+            # Using expand to not reallocate for the same tensor
+            y = y.expand(z.size(0), -1, -1, -1)
 
         return self.decode_x(z, y)
 

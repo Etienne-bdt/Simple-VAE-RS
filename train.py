@@ -47,18 +47,25 @@ def train(
     )
     best_loss = float("inf")  # Initialize best loss to infinity
     early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
+    print("Script will compute metrics every", kwargs["val_metrics_every"], "epochs")
+    print("Sanity checking the model...")
+    for _batch in val_loader:
+        pass
+    y_val, x_val = _batch
+    y_val, x_val = y_val.to(device), x_val.to(device)
+    _, c, h, w = y_val.shape
+    x_hat, y_hat, _, _, _, _, _, _ = model(x_val, y_val)
+    assert x_hat.shape == x_val.shape, "x_hat shape mismatch"
+    assert y_hat.shape == y_val.shape, "y_hat shape mismatch"
+    print("Model sanity check passed.")
     print("Computing baseline...")
     evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
     writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
 
     print("Baseline computed.")
-    for _batch in val_loader:
-        pass
-    y_val, x_val = _batch
-    _, c, h, w = y_val.shape
 
-    evaluator.log_images(y_val[:4, bands, :, :], "Reconstruction/LR_Original", 0)
-    evaluator.log_images(x_val[:4, bands, :, :], "Reconstruction/HR_Original", 0)
+    evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 0)
+    evaluator.log_images(x_val[:4, :, :, :], "Reconstruction/HR_Original", 0)
 
     for epoch in range(start_epoch, epochs + 1):
         model.train()
@@ -153,7 +160,7 @@ def train(
                     val_tot_mse_y + v_mse_y.item(),
                 )
                 val_loss += v_loss.item()
-                if epoch % kwargs["val_metrics_every"] == 0:
+                if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
                     conditional_gen = model.conditional_generation(y)
                     ssim, lpips = evaluator.compute_metrics(conditional_gen, x)
                     val_tot_ssim, val_tot_lpips = (
@@ -208,6 +215,8 @@ def train(
             x_hat.view(-1, c, h * 2, w * 2)[:4, :, :, :], "Reconstruction/HR", epoch
         )
         if not pretrain:
+            if epoch % kwargs["val_metrics_every"] != 0 and epoch not in [1, epochs]:
+                conditional_gen = model.conditional_generation(y)
             evaluator.log_images(
                 conditional_gen.view(-1, c, h * 2, w * 2)[:4, :, :, :],
                 "Conditional Generation/HR",
@@ -254,22 +263,24 @@ def train(
             },
             epoch,
         )
-        if epoch % kwargs["val_metrics_every"] == 0:
+        if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
             writer.add_scalars(
                 "Metrics/SSIM",
                 {
-                    "Recon_LR": val_recon_ssim_lr / len(val_loader.dataset),
-                    "Recon_HR": val_recon_ssim_hr / len(val_loader.dataset),
-                    "SR": val_tot_ssim / len(val_loader.dataset),
+                    "Baseline": evaluator.ssim_base,
+                    "Recon_LR": val_recon_ssim_lr / len(val_loader),
+                    "Recon_HR": val_recon_ssim_hr / len(val_loader),
+                    "SR": val_tot_ssim / len(val_loader),
                 },
                 epoch,
             )
             writer.add_scalars(
                 "Metrics/LPIPS",
                 {
-                    "Recon_LR": val_recon_lpips_lr / len(val_loader.dataset),
-                    "Recon_HR": val_recon_lpips_hr / len(val_loader.dataset),
-                    "SR": val_tot_lpips / len(val_loader.dataset),
+                    "Baseline": evaluator.lpips_base,
+                    "Recon_LR": val_recon_lpips_lr / len(val_loader),
+                    "Recon_HR": val_recon_lpips_hr / len(val_loader),
+                    "SR": val_tot_lpips / len(val_loader),
                 },
                 epoch,
             )
@@ -294,7 +305,7 @@ def main(args):
     train_loader, val_loader = init_dataloader(
         args.dataset, args.batch_size, args.patch_size
     )
-    latent_size = 4096
+    latent_size = 2048
     model = Cond_SRVAE(latent_size, args.patch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -336,6 +347,7 @@ def main(args):
             epochs=args.epochs,
             start_epoch=start_epoch,
             pretrain=False,
+            val_metrics_every=args.val_metrics_every,
         )
 
     test(device, model, val_loader)

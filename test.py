@@ -22,7 +22,7 @@ def test(device, model: Cond_SRVAE, val_loader):
     # Compute error map of samples and GT x
     diff = (samples - x).mean(dim=1)
     error_map = torch.abs(diff).cpu().numpy().mean(axis=0)
-    plt.figure(figsize=(40, 40))
+    plt.figure(figsize=(10, 10))
     plt.subplot(2, 2, 1)
     plt.imshow(y[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))
     plt.title("Input Image")
@@ -34,9 +34,9 @@ def test(device, model: Cond_SRVAE, val_loader):
     plt.colorbar()
     plt.title("Error Map")
     plt.subplot(2, 2, 4)
-    var = diff.var(dim=0).cpu().numpy()
+    var = samples.std(dim=0).mean(dim=0).cpu().numpy() * 255
     plt.imshow(var, cmap="hot")
     plt.colorbar()
-    plt.title("Variance Map")
+    plt.title(f"Std Map, Mean: {var.mean():.2f}")
     plt.savefig("variance_map_with_title.png", bbox_inches="tight")
     plt.close()
