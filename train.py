@@ -48,15 +48,15 @@ def train(
     best_loss = float("inf")  # Initialize best loss to infinity
     early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
     print("Computing baseline...")
-    eval = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
-    writer = eval.writer  # Get the TensorBoard writer from the evaluator
+    evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
+    writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
 
     print("Baseline computed.")
     y_val, x_val = next(reversed(list(val_loader)))
     _, c, h, w = y_val.shape
 
-    eval.log_images(y_val[:4, bands, :, :], "Reconstruction/LR_Original", 0)
-    eval.log_images(x_val[:4, bands, :, :], "Reconstruction/HR_Original", 0)
+    evaluator.log_images(y_val[:4, bands, :, :], "Reconstruction/LR_Original", 0)
+    evaluator.log_images(x_val[:4, bands, :, :], "Reconstruction/HR_Original", 0)
 
     for epoch in range(start_epoch, epochs + 1):
         model.train()
@@ -153,13 +153,13 @@ def train(
                 val_loss += v_loss.item()
                 if epoch % kwargs["val_metrics_every"] == 0:
                     conditional_gen = model.conditional_generation(y)
-                    ssim, lpips = eval.compute_metrics(conditional_gen, x)
+                    ssim, lpips = evaluator.compute_metrics(conditional_gen, x)
                     val_tot_ssim, val_tot_lpips = (
                         val_tot_ssim + ssim.item(),
                         val_tot_lpips + lpips,
                     )
-                    ssim_lr, lpips_lr = eval.compute_metrics(y_hat, y)
-                    ssim_hr, lpips_hr = eval.compute_metrics(x_hat, x)
+                    ssim_lr, lpips_lr = evaluator.compute_metrics(y_hat, y)
+                    ssim_hr, lpips_hr = evaluator.compute_metrics(x_hat, x)
                     (
                         val_recon_ssim_lr,
                         val_recon_lpips_lr,
@@ -199,14 +199,14 @@ def train(
 
         # Log reconstruction and Conditional generation
 
-        eval.log_images(
+        evaluator.log_images(
             y_hat.view(-1, c, h, w)[:4, bands, :, :], "Reconstruction/LR", epoch
         )
-        eval.log_images(
+        evaluator.log_images(
             x_hat.view(-1, c, h * 2, w * 2)[:4, bands, :, :], "Reconstruction/HR", epoch
         )
         if not pretrain:
-            eval.log_images(
+            evaluator.log_images(
                 conditional_gen.view(-1, c, h * 2, w * 2)[:4, bands, :, :],
                 "Conditional Generation/HR",
                 epoch,
