@@ -82,6 +82,7 @@ class SrEvaluator:
         Initialize the SR_Evaluator class.
         """
         self.val_loader = val_loader
+        self.len_val = len(val_loader)
         self.writer = SummaryWriter()
         self.start_epoch = start_epoch
         self.lpips_loss = lpips.LPIPS(net="alex").cuda()
@@ -128,8 +129,8 @@ class SrEvaluator:
                 ssim, lpips = self.compute_metrics(hr_interp, x_val)
                 ssim_cumu += ssim
                 lpips_cumu += lpips
-            self.ssim_base = ssim_cumu / len(self.val_loader)
-            self.lpips_base = lpips_cumu / len(self.val_loader)
+            self.ssim_base = ssim_cumu
+            self.lpips_base = lpips_cumu
             torch.save(
                 {
                     "ssim_base": self.ssim_base,
@@ -151,6 +152,7 @@ class SrEvaluator:
             gt (torch.Tensor): Ground truth images (A batch).
         """
         ssim_score, lpips_score = 0, 0
+        b = pred.shape[0]
         for p, g in zip(pred, gt):
             ssim_s = self.ssim(
                 p.cpu().numpy(),
@@ -168,9 +170,9 @@ class SrEvaluator:
             lpips_score += lpips_s
             ssim_score += ssim_s
         ssim_score = ssim_score
-        ssim_score = torch.tensor(ssim_score)
+        ssim_score = torch.tensor(ssim_score) / (b * self.len_val)
 
-        lpips_score = lpips_score
+        lpips_score = lpips_score / (b * self.len_val)
         return ssim_score, lpips_score
 
     def log_images(self, img, category, epoch):

@@ -280,7 +280,8 @@ class Cond_SRVAE(nn.Module):
             y = y.unsqueeze(0)
             # Using expand to not reallocate for the same tensor
             y = y.expand(z.size(0), -1, -1, -1)
-
+        elif y.ndim == 4 and y.size(0) == 1:
+            y = y.expand(z.size(0), -1, -1, -1)
         return self.decode_x(z, y)
 
     def freeze_cond(self):

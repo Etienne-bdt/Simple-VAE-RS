@@ -268,9 +268,9 @@ def train(
                 "Metrics/SSIM",
                 {
                     "Baseline": evaluator.ssim_base,
-                    "Recon_LR": val_recon_ssim_lr / len(val_loader),
-                    "Recon_HR": val_recon_ssim_hr / len(val_loader),
-                    "SR": val_tot_ssim / len(val_loader),
+                    "Recon_LR": val_recon_ssim_lr,
+                    "Recon_HR": val_recon_ssim_hr,
+                    "SR": val_tot_ssim,
                 },
                 epoch,
             )
@@ -278,9 +278,9 @@ def train(
                 "Metrics/LPIPS",
                 {
                     "Baseline": evaluator.lpips_base,
-                    "Recon_LR": val_recon_lpips_lr / len(val_loader),
-                    "Recon_HR": val_recon_lpips_hr / len(val_loader),
-                    "SR": val_tot_lpips / len(val_loader),
+                    "Recon_LR": val_recon_lpips_lr,
+                    "Recon_HR": val_recon_lpips_hr,
+                    "SR": val_tot_lpips,
                 },
                 epoch,
             )
