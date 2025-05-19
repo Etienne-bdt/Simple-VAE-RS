@@ -41,12 +41,9 @@ def train(
         bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
     bands = bands or [2, 1, 0]  # Default to RGB bands if not provided
-    # SLURM JOB ID
-    slurm_job_id = os.environ.get(
-        "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
-    )
+    slurm_job_id = kwargs["slurm_job_id"]
     best_loss = float("inf")  # Initialize best loss to infinity
-    early_stopper = EarlyStopper(patience=20, delta=0.001)  # Initialize early stopper
+    early_stopper = EarlyStopper(patience=30, delta=0.001)  # Initialize early stopper
     print("Script will compute metrics every", kwargs["val_metrics_every"], "epochs")
     print("Sanity checking the model...")
     for _batch in val_loader:
@@ -306,6 +303,10 @@ def main(args):
         args.dataset, args.batch_size, args.patch_size
     )
     latent_size = 2048
+    slurm_job_id = os.environ.get(
+        "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
+    )
+    os.makedirs(slurm_job_id, exist_ok=True)
     model = Cond_SRVAE(latent_size, args.patch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -348,6 +349,7 @@ def main(args):
             start_epoch=start_epoch,
             pretrain=False,
             val_metrics_every=args.val_metrics_every,
+            slurm_job_id=slurm_job_id,
         )
 
     test(device, model, val_loader)

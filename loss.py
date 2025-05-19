@@ -47,12 +47,15 @@ def cond_loss(
         - 2: `z` derived from `x`.
         - 3: `z` derived from `y` and `u`.
     """
-    d = mu1.size(1)
-    mse_y = d * (
+    y_shape = recon_y.shape
+    x_shape = recon_x.shape
+    n_y = y_shape[0] * y_shape[1] * y_shape[2] * y_shape[3]
+    n_x = x_shape[0] * x_shape[1] * x_shape[2] * x_shape[3]
+    mse_y = n_y * (
         F.mse_loss(recon_y, y, reduction="mean") / (2 * gamma2.pow(2)) + (gamma2.log())
     )
     kld_u = 0.5 * torch.sum(mu1.pow(2) + logvar1.exp() - 1 - logvar1, dim=1).mean()
-    mse_x = d * (
+    mse_x = n_x * (
         F.mse_loss(recon_x, x, reduction="mean") / (2 * gamma.pow(2)) + (gamma.log())
     )
     kld_z = (
