@@ -1,3 +1,5 @@
+import os
+
 import lpips
 import torch
 import torch.nn.functional as F
@@ -80,6 +82,7 @@ class SrEvaluator:
         Initialize the SR_Evaluator class.
         """
         self.val_loader = val_loader
+        self.len_val = len(val_loader)
         self.writer = SummaryWriter()
         self.start_epoch = start_epoch
         self.lpips_loss = lpips.LPIPS(net="alex").cuda()
@@ -114,19 +117,32 @@ class SrEvaluator:
             dataformats="NCHW",
         )
         ssim_cumu, lpips_cumu = 0, 0
-        for _, batch in tqdm(enumerate(self.val_loader)):
-            y_val, x_val = batch
-            y_val = y_val.cuda()
-            x_val = x_val.cuda()
+        if not os.path.exists("baseline_ckpt.pth"):
+            for _, batch in tqdm(enumerate(self.val_loader)):
+                y_val, x_val = batch
+                y_val = y_val.cuda()
+                x_val = x_val.cuda()
 
-            hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
+                hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
 
-            # Compute SSIM and LPIPS scores
-            ssim, lpips = self.compute_metrics(hr_interp, x_val)
-            ssim_cumu += ssim
-            lpips_cumu += lpips
-        self.ssim_base = ssim_cumu / len(self.val_loader)
-        self.lpips_base = lpips_cumu / len(self.val_loader)
+                # Compute SSIM and LPIPS scores
+                ssim, lpips = self.compute_metrics(hr_interp, x_val)
+                ssim_cumu += ssim
+                lpips_cumu += lpips
+            self.ssim_base = ssim_cumu
+            self.lpips_base = lpips_cumu
+            torch.save(
+                {
+                    "ssim_base": self.ssim_base,
+                    "lpips_base": self.lpips_base,
+                },
+                "baseline_ckpt.pth",
+            )
+        else:
+            checkpoint = torch.load("baseline_ckpt.pth")
+            self.ssim_base = checkpoint["ssim_base"]
+            self.lpips_base = checkpoint["lpips_base"]
+            print(f"SSIM Baseline: {self.ssim_base}, LPIPS Baseline: {self.lpips_base}")
 
     def compute_metrics(self, pred, gt):
         """
@@ -136,6 +152,7 @@ class SrEvaluator:
             gt (torch.Tensor): Ground truth images (A batch).
         """
         ssim_score, lpips_score = 0, 0
+        b = pred.shape[0]
         for p, g in zip(pred, gt):
             ssim_s = self.ssim(
                 p.cpu().numpy(),
@@ -153,9 +170,9 @@ class SrEvaluator:
             lpips_score += lpips_s
             ssim_score += ssim_s
         ssim_score = ssim_score
-        ssim_score = torch.tensor(ssim_score)
+        ssim_score = torch.tensor(ssim_score) / (b * self.len_val)
 
-        lpips_score = lpips_score
+        lpips_score = lpips_score / (b * self.len_val)
         return ssim_score, lpips_score
 
     def log_images(self, img, category, epoch):

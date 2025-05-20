@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #SBATCH --nodes=1
-#SBATCH --time=1-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --job-name=Conditionnal_VAE
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR

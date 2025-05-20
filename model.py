@@ -280,8 +280,15 @@ class Cond_SRVAE(nn.Module):
             y = y.unsqueeze(0)
             # Using expand to not reallocate for the same tensor
             y = y.expand(z.size(0), -1, -1, -1)
-
+        elif y.ndim == 4 and y.size(0) == 1:
+            y = y.expand(z.size(0), -1, -1, -1)
         return self.decode_x(z, y)
+
+    def generation(self):
+        u = torch.randn(1, self.latent_size).to("cuda")
+        y = self.decode_y(u)
+
+        return y, self.conditional_generation(y)
 
     def freeze_cond(self):
         for param in self.u_to_z.parameters():
