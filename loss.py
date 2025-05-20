@@ -134,6 +134,7 @@ def cond_loss_mog(
     logvar1_exp = logvar1.unsqueeze(1).expand(-1, num_components, -1)
     means_exp = means.unsqueeze(0).expand(batch_size, -1, -1)
     logvars_exp = logvars.unsqueeze(0).expand(batch_size, -1, -1)
+    weight = weight.softmax(dim=0)
     weight_exp = weight.unsqueeze(0).expand(batch_size, -1)
 
     # Compute KL divergence for all components
