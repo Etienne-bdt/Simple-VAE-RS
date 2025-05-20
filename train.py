@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 from dataset import init_dataloader
-from loss import cond_loss
+from loss import cond_loss_mog
 from model import Cond_SRVAE
 from test import test
 from utils import EarlyStopper, SrEvaluator
@@ -80,7 +80,7 @@ def train(
             x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(
                 x, y
             )
-            mse_x, kld_u, mse_y, kld_z = cond_loss(
+            mse_x, kld_u, mse_y, kld_z = cond_loss_mog(
                 x_hat,
                 x,
                 y_hat,
@@ -93,6 +93,9 @@ def train(
                 logvar_z_uy,
                 gamma,
                 gamma2,
+                model.weight,
+                model.means,
+                model.logvars,
             )
             loss = (
                 mse_x + kld_u + mse_y + kld_z if not pretrain else mse_y + kld_u + mse_x
@@ -131,7 +134,7 @@ def train(
                 x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = (
                     model(x, y)
                 )
-                v_mse_x, v_kld_u, v_mse_y, v_kld_z = cond_loss(
+                v_mse_x, v_kld_u, v_mse_y, v_kld_z = cond_loss_mog(
                     x_hat,
                     x,
                     y_hat,
@@ -144,6 +147,9 @@ def train(
                     logvar_z_uy,
                     gamma,
                     gamma2,
+                    model.weight,
+                    model.means,
+                    model.logvars,
                 )
                 v_loss = (
                     v_mse_x + v_kld_u + v_mse_y + v_kld_z
@@ -307,7 +313,7 @@ def main(args):
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
     os.makedirs(slurm_job_id, exist_ok=True)
-    model = Cond_SRVAE(latent_size, args.patch_size)
+    model = Cond_SRVAE(latent_size, args.patch_size, num_comp=16)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 

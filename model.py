@@ -70,10 +70,21 @@ class VAE(nn.Module):
 
 
 class Cond_SRVAE(nn.Module):
-    def __init__(self, latent_size, patch_size=256):
+    def __init__(self, latent_size, patch_size=256, num_comp=1):
         super(Cond_SRVAE, self).__init__()
         self.latent_size = latent_size
         self.patch_size = patch_size
+
+        self.num_comp = num_comp
+        if self.num_comp > 1:
+            self.weight = nn.Parameter(torch.ones(self.num_comp) / self.num_comp)
+            self.means = nn.Parameter(torch.zeros(self.num_comp, self.latent_size))
+            self.logvars = nn.Parameter(torch.ones(self.num_comp, self.latent_size))
+        else:
+            self.weight = torch.ones(1)
+            self.means = torch.zeros(1, self.latent_size)
+            self.logvars = torch.ones(1, self.latent_size)
+
         self.encoder1 = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
             nn.BatchNorm2d(32),
