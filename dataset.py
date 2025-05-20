@@ -5,7 +5,7 @@ import numpy as np
 import polars as pl
 import rasterio
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, default_collate
 
 from utils import normalize_image
 
@@ -38,7 +38,7 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
         persistent_workers=True,
         collate_fn=grid_collate
         if isinstance(ds, Sen2VenDataset) and ds.crop == "grid"
-        else None,
+        else default_collate,
     )
     val_loader = torch.utils.data.DataLoader(
         val_ds,
@@ -48,7 +48,7 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
         persistent_workers=True,
         collate_fn=grid_collate
         if isinstance(ds, Sen2VenDataset) and ds.crop == "grid"
-        else None,
+        else default_collate,
     )
     return train_loader, val_loader
 

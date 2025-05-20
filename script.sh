@@ -6,7 +6,7 @@
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
 #SBATCH --partition=gpu02
-#SBATCH --nodelist=gpu01
+#SBATCH --nodelist=gpu02
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
@@ -17,4 +17,4 @@ source activate vae-rs
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
-python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --val_metrics_every 10
+python train.py --patch_size 256 --batch_size 4 --pre_epochs 0 --val_metrics_every 10
