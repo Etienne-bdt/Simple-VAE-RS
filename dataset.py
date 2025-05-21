@@ -37,7 +37,7 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
         num_workers=6,
         persistent_workers=True,
         collate_fn=grid_collate
-        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid"
+        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid" and patch_size < 256
         else default_collate,
     )
     val_loader = torch.utils.data.DataLoader(
@@ -47,7 +47,7 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
         num_workers=6,
         persistent_workers=True,
         collate_fn=grid_collate
-        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid"
+        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid" and patch_size < 256
         else default_collate,
     )
     return train_loader, val_loader
