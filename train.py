@@ -41,10 +41,14 @@ def train(
         bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
     """
     bands = bands or [2, 1, 0]  # Default to RGB bands if not provided
-    slurm_job_id = kwargs["slurm_job_id"]
+    slurm_job_id = kwargs.get("slurm_job_id", f"local_{time.strftime('%Y%m%D-%H%M%S')}")
+    val_metrics_every = kwargs.get("val_metrics_every", float("inf"))
+    no_save = kwargs.get("no_save", False)
+    if no_save:
+        print("We ride at dawn.")
     best_loss = float("inf")  # Initialize best loss to infinity
     early_stopper = EarlyStopper(patience=30, delta=0.001)  # Initialize early stopper
-    print("Script will compute metrics every", kwargs["val_metrics_every"], "epochs")
+    print("Script will compute metrics every", val_metrics_every, "epochs")
     print("Sanity checking the model...")
     for _batch in val_loader:
         pass
@@ -163,7 +167,7 @@ def train(
                     val_tot_mse_y + v_mse_y.item(),
                 )
                 val_loss += v_loss.item()
-                if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
+                if epoch % val_metrics_every == 0 or epoch in [1, epochs]:
                     conditional_gen = model.conditional_generation(y)
                     ssim, lpips = evaluator.compute_metrics(conditional_gen, x)
                     val_tot_ssim, val_tot_lpips = (
@@ -191,7 +195,7 @@ def train(
                 f"====> Early stopping at epoch {epoch} with loss: {val_loss / len(val_loader.dataset):.4f}"
             )
             break
-        if val_loss / len(val_loader.dataset) < best_loss:
+        if val_loss / len(val_loader.dataset) < best_loss and not no_save:
             best_loss = val_loss / len(val_loader.dataset)
             print(
                 f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}"
@@ -218,7 +222,7 @@ def train(
             x_hat.view(-1, c, h * 2, w * 2)[:4, :, :, :], "Reconstruction/HR", epoch
         )
         if not pretrain:
-            if epoch % kwargs["val_metrics_every"] != 0 and epoch not in [1, epochs]:
+            if epoch % val_metrics_every != 0 and epoch not in [1, epochs]:
                 conditional_gen = model.conditional_generation(y)
             evaluator.log_images(
                 conditional_gen.view(-1, c, h * 2, w * 2)[:4, :, :, :],
@@ -266,7 +270,7 @@ def train(
             },
             epoch,
         )
-        if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
+        if epoch % val_metrics_every == 0 or epoch in [1, epochs]:
             writer.add_scalars(
                 "Metrics/SSIM",
                 {
@@ -296,7 +300,7 @@ def train(
             raise ValueError("Loss is NaN, stopping training.")
 
     writer.close()  # Close the TensorBoard writer
-    return
+    return val_tot_ssim
 
 
 def main(args):
@@ -308,11 +312,11 @@ def main(args):
     train_loader, val_loader = init_dataloader(
         args.dataset, args.batch_size, args.patch_size
     )
-    latent_size = 2048
+    latent_size = args.latent_size
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
-    os.makedirs(slurm_job_id, exist_ok=True)
+    os.makedirs(os.path.join("results", slurm_job_id), exist_ok=True)
     model = Cond_SRVAE(latent_size, args.patch_size, num_comp=16)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -333,8 +337,8 @@ def main(args):
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
         start_epoch = 1
-        gamma = torch.tensor([1.0]).to(device)
-        gamma2 = torch.tensor([1.0]).to(device)
+        gamma = torch.tensor([0.03]).to(device)
+        gamma2 = torch.tensor([0.04]).to(device)
         gamma.requires_grad = True
         gamma2.requires_grad = True
         optimizer.add_param_group({"params": [gamma, gamma2]})
@@ -409,6 +413,10 @@ def parse_args():
         type=int,
         default=5,
         help="Number of epochs between validation metrics computation.",
+    )
+
+    parser.add_argument(
+        "-l", "--latent_size", type=int, default=2048, help="Latent size."
     )
 
     return parser.parse_args()

@@ -10,6 +10,8 @@ dependencies:
   - polars
   - pre-commit
   - scikit-image
+  - optuna
+  - optuna-dashboard
   - pip
   - pip:
       - torch

@@ -12,3 +12,5 @@ ARM/
 floods/
 
 *.png
+#Optuna db
+*.sqlite3 

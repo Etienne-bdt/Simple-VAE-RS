@@ -77,9 +77,9 @@ class Cond_SRVAE(nn.Module):
 
         self.num_comp = num_comp
         if self.num_comp > 1:
-            self.weight = nn.Parameter(torch.ones(self.num_comp) / self.num_comp)
-            self.means = nn.Parameter(torch.zeros(self.num_comp, self.latent_size))
-            self.logvars = nn.Parameter(torch.ones(self.num_comp, self.latent_size))
+            self.weight = nn.Parameter(torch.randn(self.num_comp))
+            self.means = nn.Parameter(torch.randn(self.num_comp, self.latent_size))
+            self.logvars = nn.Parameter(torch.randn(self.num_comp, self.latent_size))
         else:
             self.weight = torch.ones(1)
             self.means = torch.zeros(1, self.latent_size)
