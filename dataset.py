@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
-import rasterio
+import tifffile
 import torch
 from torch.utils.data import Dataset, default_collate
 
@@ -75,8 +75,7 @@ class FloodDataset(Dataset):
                 if x.endswith(".tif")
             ]
             for img_path in img_paths:
-                with rasterio.open(img_path) as src:
-                    img = src.read()  # Read all bands
+                img = tifffile.imread(img_path)  # Read all bands
                 height, width = img.shape[1], img.shape[2]
                 for row in range(0, height, self.patch_size):
                     for col in range(0, width, self.patch_size):
@@ -147,10 +146,8 @@ class Sen2VenDataset(Dataset):
         p2 = os.path.join(self.dataset, p2)
 
         # Load the images using rasterio
-        with rasterio.open(p1) as src1:
-            img1 = src1.read()  # Read all bands
-        with rasterio.open(p2) as src2:
-            img2 = src2.read()  # Read all bands
+        img1 = tifffile.imread(p1)
+        img2 = tifffile.imread(p2)
 
         img1 = torch.tensor(img1, dtype=torch.float32)
         img2 = torch.tensor(img2, dtype=torch.float32)
