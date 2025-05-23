@@ -13,4 +13,4 @@ floods/
 
 *.png
 #Optuna db
-*.sqlite3 
+*.sqlite3
