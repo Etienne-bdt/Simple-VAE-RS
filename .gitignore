@@ -2,6 +2,8 @@
 __pycache__/
 *.pth
 
+.venv/*
+
 # Logs and checkpoints
 lightning_logs/
 runs/

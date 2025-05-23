@@ -13,7 +13,7 @@
 
 module load python/3.8
 
-source activate vae-rs
+source activate .venv/bin/activate
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
