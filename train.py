@@ -59,7 +59,7 @@ def train(
     evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
     writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=30, verbose=True
+        optimizer, mode="min", factor=0.5, patience=30
     )  # Initialize learning rate scheduler
     print("Baseline computed.")
 
@@ -264,7 +264,7 @@ def train(
 
         writer.add_scalar("Gamma/Gamma_y", gamma2.item(), epoch)
         writer.add_scalar("Gamma/Gamma_x", gamma.item(), epoch)
-
+        writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
         if torch.isnan(loss):
             raise ValueError("Loss is NaN, stopping training.")
 
@@ -281,11 +281,12 @@ def main(args):
     train_loader, val_loader = init_dataloader(
         args.dataset, args.batch_size, args.patch_size
     )
-    latent_size = 2048
+    latent_size = 10000
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
-    os.makedirs(slurm_job_id, exist_ok=True)
+    results_dir = os.path.join("results", str(latent_size), slurm_job_id)
+    os.makedirs(results_dir, exist_ok=True)
     model = Cond_SRVAE(latent_size, args.patch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
