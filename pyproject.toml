@@ -5,11 +5,17 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "imagecodecs>=2025.3.30",
     "lpips>=0.1.4",
     "matplotlib>=3.10.3",
     "numpy>=2.2.6",
     "polars>=1.30.0",
+    "scikit-image>=0.25.2",
+    "tensorboard>=2.19.0",
     "tifffile>=2025.5.21",
     "torch==2.6.0",
     "tqdm>=4.67.1",
 ]
+
+[tool.uv]
+link-mode = "symlink"

@@ -6,15 +6,15 @@
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
 #SBATCH --partition=gpu02
-#SBATCH --nodelist=gpu02
+#SBATCH --nodelist=gpu01
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
 
 module load python/3.8
 
-source activate vae-rs
+source .venv/bin/activate
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
-python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --val_metrics_every 10 --epochs 500
+python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --val_metrics_every 10 --epochs 500 --model_ckpt "best_model_3850701.pth"
