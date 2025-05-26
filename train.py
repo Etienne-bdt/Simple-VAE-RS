@@ -58,7 +58,9 @@ def train(
     print("Computing baseline...")
     evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
     writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
-
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=30, verbose=True
+    )  # Initialize learning rate scheduler
     print("Baseline computed.")
 
     evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 0)
@@ -177,7 +179,7 @@ def train(
                         val_recon_ssim_hr + ssim_hr.item(),
                         val_recon_lpips_hr + lpips_hr,
                     )
-
+        scheduler.step(val_loss / len(val_loader))  # Step the scheduler
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
         if early_stopper(val_loss / len(val_loader.dataset)):
@@ -220,71 +222,48 @@ def train(
                 epoch,
             )
         # Log to TensorBoard
-        writer.add_scalars(
-            "Loss/KLD_u",
-            {
-                "Train": tot_kld_u / len(train_loader.dataset),
-                "Validation": val_tot_kld_u / len(val_loader.dataset),
-            },
-            epoch,
+        writer.add_scalar(
+            "Loss/KLD_u/Train", tot_kld_u / len(train_loader.dataset), epoch
         )
-        writer.add_scalars(
-            "Loss/KLD_z",
-            {
-                "Train": tot_kld_z / len(train_loader.dataset),
-                "Validation": val_tot_kld_z / len(val_loader.dataset),
-            },
-            epoch,
+        writer.add_scalar(
+            "Loss/KLD_u/Validation", val_tot_kld_u / len(val_loader.dataset), epoch
         )
-        writer.add_scalars(
-            "Loss/MSE_y",
-            {
-                "Train": tot_mse_y / len(train_loader.dataset),
-                "Validation": val_tot_mse_y / len(val_loader.dataset),
-            },
-            epoch,
+        writer.add_scalar(
+            "Loss/KLD_z/Train", tot_kld_z / len(train_loader.dataset), epoch
         )
-        writer.add_scalars(
-            "Loss/MSE_x",
-            {
-                "Train": tot_mse_x / len(train_loader.dataset),
-                "Validation": val_tot_mse_x / len(val_loader.dataset),
-            },
-            epoch,
+        writer.add_scalar(
+            "Loss/KLD_z/Validation", val_tot_kld_z / len(val_loader.dataset), epoch
         )
-        writer.add_scalars(
-            "Loss/Total",
-            {
-                "Train": train_loss / len(train_loader.dataset),
-                "Validation": val_loss / len(val_loader.dataset),
-            },
-            epoch,
+        writer.add_scalar(
+            "Loss/MSE_y/Train", tot_mse_y / len(train_loader.dataset), epoch
+        )
+        writer.add_scalar(
+            "Loss/MSE_y/Validation", val_tot_mse_y / len(val_loader.dataset), epoch
+        )
+        writer.add_scalar(
+            "Loss/MSE_x/Train", tot_mse_x / len(train_loader.dataset), epoch
+        )
+        writer.add_scalar(
+            "Loss/MSE_x/Validation", val_tot_mse_x / len(val_loader.dataset), epoch
+        )
+        writer.add_scalar(
+            "Loss/Total/Train", train_loss / len(train_loader.dataset), epoch
+        )
+        writer.add_scalar(
+            "Loss/Total/Validation", val_loss / len(val_loader.dataset), epoch
         )
         if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
-            writer.add_scalars(
-                "Metrics/SSIM",
-                {
-                    "Baseline": evaluator.ssim_base,
-                    "Recon_LR": val_recon_ssim_lr,
-                    "Recon_HR": val_recon_ssim_hr,
-                    "SR": val_tot_ssim,
-                },
-                epoch,
-            )
-            writer.add_scalars(
-                "Metrics/LPIPS",
-                {
-                    "Baseline": evaluator.lpips_base,
-                    "Recon_LR": val_recon_lpips_lr,
-                    "Recon_HR": val_recon_lpips_hr,
-                    "SR": val_tot_lpips,
-                },
-                epoch,
-            )
+            writer.add_scalar("Metrics/SSIM/Baseline", evaluator.ssim_base, epoch)
+            writer.add_scalar("Metrics/SSIM/Recon_LR", val_recon_ssim_lr, epoch)
+            writer.add_scalar("Metrics/SSIM/Recon_HR", val_recon_ssim_hr, epoch)
+            writer.add_scalar("Metrics/SSIM/SR", val_tot_ssim, epoch)
+            writer.add_scalar("Metrics/LPIPS/Baseline", evaluator.lpips_base, epoch)
+            writer.add_scalar("Metrics/LPIPS/Recon_LR", val_recon_lpips_lr, epoch)
+            writer.add_scalar("Metrics/LPIPS/Recon_HR", val_recon_lpips_hr, epoch)
+            writer.add_scalar("Metrics/LPIPS/SR", val_tot_lpips, epoch)
 
-        writer.add_scalars(
-            "Gamma", {"Gamma_y": gamma2.item(), "Gamma_x": gamma.item()}, epoch
-        )
+        writer.add_scalar("Gamma/Gamma_y", gamma2.item(), epoch)
+        writer.add_scalar("Gamma/Gamma_x", gamma.item(), epoch)
 
         if torch.isnan(loss):
             raise ValueError("Loss is NaN, stopping training.")
