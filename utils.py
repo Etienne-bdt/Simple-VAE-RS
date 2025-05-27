@@ -111,14 +111,14 @@ class SrEvaluator:
                         x_val[i].permute(1, 2, 0).cpu().numpy(),
                         caption=f"HR Original {i}",
                     )
-                    for i in range(max(y_val.shape[0], 4))
+                    for i in range(min(y_val.shape[0], 4))
                 ],
                 "Conditional Generation/LR_Original": [
                     wandb.Image(
                         y_val[i].permute(1, 2, 0).cpu().numpy(),
                         caption=f"LR Original {i}",
                     )
-                    for i in range(max(y_val.shape[0], 4))
+                    for i in range(min(y_val.shape[0], 4))
                 ],
             },
             step=self.start_epoch,
