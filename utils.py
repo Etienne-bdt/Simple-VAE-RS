@@ -121,7 +121,7 @@ class SrEvaluator:
                     for i in range(min(y_val.shape[0], 4))
                 ],
             },
-            step=self.start_epoch,
+            step=self.start_epoch - 1,
         )
         ssim_cumu, lpips_cumu = 0, 0
         if not os.path.exists("baseline_ckpt.pth"):
@@ -193,10 +193,11 @@ class SrEvaluator:
             {
                 category: [
                     wandb.Image(
-                        img[i].permute(1, 2, 0).cpu().numpy(), caption=f"{category} {i}"
+                        img[i].permute(1, 2, 0).cpu().detach().numpy(),
+                        caption=f"{category} {i}",
                     )
                     for i in range(img.shape[0])
                 ]
             },
-            step=epoch,
+            step=epoch - 1,
         )

@@ -64,8 +64,8 @@ def train(
     )  # Initialize learning rate scheduler
     print("Baseline computed.")
 
-    evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 0)
-    evaluator.log_images(x_val[:4, :, :, :], "Reconstruction/HR_Original", 0)
+    evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 1)
+    evaluator.log_images(x_val[:4, :, :, :], "Reconstruction/HR_Original", 1)
 
     for epoch in range(start_epoch, epochs + 1):
         model.train()
@@ -239,7 +239,7 @@ def train(
                 "Gamma/Gamma_x": gamma.item(),
                 "Learning Rate": optimizer.param_groups[0]["lr"],
             },
-            step=epoch,
+            step=epoch - 1,
         )
         if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
             wandb_run.log(
@@ -253,7 +253,7 @@ def train(
                     "Metrics/LPIPS/Recon_HR": val_recon_lpips_hr,
                     "Metrics/LPIPS/SR": val_tot_lpips,
                 },
-                step=epoch,
+                step=epoch - 1,
             )
         if torch.isnan(loss):
             raise ValueError("Loss is NaN, stopping training.")
