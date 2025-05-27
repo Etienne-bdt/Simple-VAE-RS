@@ -1,4 +1,4 @@
-name: CI
+name: Ruff
 
 # Controls when the workflow will run
 on:
