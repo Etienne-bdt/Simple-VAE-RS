@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 from dataset import init_dataloader
 from loss import cond_loss
-from model import Cond_SRVAE
 from test import test
 from utils import EarlyStopper, SrEvaluator
 
@@ -70,7 +69,7 @@ def train(
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         train_loss = 0
-        tot_mse_x, tot_kld_u, tot_mse_y, tot_kld_z = (0, 0, 0, 0)
+        train_logs = []
         for _, batch in tqdm(
             enumerate(train_loader),
             total=len(train_loader),
@@ -78,36 +77,11 @@ def train(
             unit="batch",
         ):
             optimizer.zero_grad()
-            y, x = batch
-            y, x = y.to(device), x.to(device)
-            x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(
-                x, y
-            )
-            mse_x, kld_u, mse_y, kld_z = cond_loss(
-                x_hat,
-                x,
-                y_hat,
-                y,
-                mu_u,
-                logvar_u,
-                mu_z,
-                logvar_z,
-                mu_z_uy,
-                logvar_z_uy,
-                gamma,
-                gamma2,
-            )
-            loss = (
-                mse_x + kld_u + mse_y + kld_z if not pretrain else mse_y + kld_u + mse_x
-            )
-            tot_kld_u, tot_kld_z, tot_mse_x, tot_mse_y = (
-                tot_kld_u + kld_u.item(),
-                tot_kld_z + kld_z.item(),
-                tot_mse_x + mse_x.item(),
-                tot_mse_y + mse_y.item(),
-            )
+            # Utilisation du train_step générique
+            loss, logs = model.train_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
             loss.backward()
             train_loss += loss.item()
+            train_logs.append(logs)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
@@ -118,68 +92,14 @@ def train(
         )
 
         val_loss = 0
-        val_recon_ssim_lr, val_recon_lpips_lr, val_recon_ssim_hr, val_recon_lpips_hr = (
-            0,
-            0,
-            0,
-            0,
-        )
-        val_tot_ssim, val_tot_lpips = 0, 0
-        val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (0, 0, 0, 0)
+        val_logs = []
         model.eval()
         with torch.no_grad():
             for _, batch in enumerate(val_loader):
-                y, x = batch
-                y, x = y.to(device), x.to(device)
-                x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = (
-                    model(x, y)
-                )
-                v_mse_x, v_kld_u, v_mse_y, v_kld_z = cond_loss(
-                    x_hat,
-                    x,
-                    y_hat,
-                    y,
-                    mu_u,
-                    logvar_u,
-                    mu_z,
-                    logvar_z,
-                    mu_z_uy,
-                    logvar_z_uy,
-                    gamma,
-                    gamma2,
-                )
-                v_loss = (
-                    v_mse_x + v_kld_u + v_mse_y + v_kld_z
-                    if not pretrain
-                    else v_mse_y + v_kld_u + v_mse_x
-                )
-                val_tot_kld_u, val_tot_kld_z, val_tot_mse_x, val_tot_mse_y = (
-                    val_tot_kld_u + v_kld_u.item(),
-                    val_tot_kld_z + v_kld_z.item(),
-                    val_tot_mse_x + v_mse_x.item(),
-                    val_tot_mse_y + v_mse_y.item(),
-                )
+                # Utilisation du val_step générique
+                v_loss, vlogs = model.val_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
                 val_loss += v_loss.item()
-                if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
-                    conditional_gen = model.conditional_generation(y)
-                    ssim, lpips = evaluator.compute_metrics(conditional_gen, x)
-                    val_tot_ssim, val_tot_lpips = (
-                        val_tot_ssim + ssim.item(),
-                        val_tot_lpips + lpips,
-                    )
-                    ssim_lr, lpips_lr = evaluator.compute_metrics(y_hat, y)
-                    ssim_hr, lpips_hr = evaluator.compute_metrics(x_hat, x)
-                    (
-                        val_recon_ssim_lr,
-                        val_recon_lpips_lr,
-                        val_recon_ssim_hr,
-                        val_recon_lpips_hr,
-                    ) = (
-                        val_recon_ssim_lr + ssim_lr.item(),
-                        val_recon_lpips_lr + lpips_lr,
-                        val_recon_ssim_hr + ssim_hr.item(),
-                        val_recon_lpips_hr + lpips_hr,
-                    )
+                val_logs.append(vlogs)
         scheduler.step(val_loss / len(val_loader))  # Step the scheduler
         print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
 
@@ -277,7 +197,15 @@ def main(args):
     )
     results_dir = os.path.join("results", str(latent_size), slurm_job_id)
     os.makedirs(results_dir, exist_ok=True)
-    model = Cond_SRVAE(latent_size, args.patch_size)
+    # Instanciation dynamique du modèle
+    if args.model_type == "VAE":
+        from model import VAE
+
+        model = VAE(latent_size)
+    else:
+        from model import Cond_SRVAE
+
+        model = Cond_SRVAE(latent_size, args.patch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -321,15 +249,15 @@ def main(args):
         param_group["lr"] = 1e-3
 
     if not (args.test and args.model_ckpt):
-        train(
-            device,
-            model,
-            train_loader,
-            val_loader,
-            gamma,
-            gamma2,
-            optimizer,
+        # Utilisation de la méthode fit du modèle
+        model.fit(
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
             epochs=args.epochs,
+            device=device,
+            gamma=gamma,
+            gamma2=gamma2,
             start_epoch=start_epoch,
             pretrain=False,
             val_metrics_every=args.val_metrics_every,
@@ -392,6 +320,13 @@ def parse_args():
 
     parser.add_argument(
         "-l", "--latent_size", type=int, default=10000, help="Size of the latent space."
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="Cond_SRVAE",
+        choices=["Cond_SRVAE", "VAE"],
+        help="Type de modèle à utiliser : 'Cond_SRVAE' ou 'VAE'",
     )
 
     return parser.parse_args()

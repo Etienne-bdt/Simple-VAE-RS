@@ -1,8 +1,154 @@
 import torch
 import torch.nn as nn
+import abc
+from utils import EarlyStopper, SrEvaluator
+from loss import cond_loss
+import wandb
+from tqdm import tqdm
 
 
-class VAE(nn.Module):
+class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
+    """
+    Classe de base pour tous les VAE. Définit l'interface commune pour l'entraînement et la validation.
+    """
+    def __init__(self):
+        super().__init__()
+
+    @abc.abstractmethod
+    def forward(self, *args, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def train_step(self, batch, device, loss_fn, **kwargs):
+        """
+        Effectue une étape d'entraînement sur un batch.
+        Args:
+            batch: batch de données
+            device: device utilisé
+            loss_fn: fonction de perte
+        Returns:
+            loss, logs (dict)
+        """
+        pass
+
+    @abc.abstractmethod
+    def val_step(self, batch, device, loss_fn, **kwargs):
+        """
+        Effectue une étape de validation sur un batch.
+        Args:
+            batch: batch de données
+            device: device utilisé
+            loss_fn: fonction de perte
+        Returns:
+            loss, logs (dict)
+        """
+        pass
+
+    def log(self, logs, step=None):
+        """
+        Méthode optionnelle pour logger des informations spécifiques au modèle.
+        Args:
+            logs: dictionnaire de valeurs à logger
+            step: étape courante (optionnel)
+        """
+        pass
+
+    def fit(self, train_loader, val_loader, optimizer, epochs, device, gamma, gamma2, start_epoch=1, pretrain=False, val_metrics_every=5, slurm_job_id=None, wandb_run=None):
+        """
+        Boucle d'entraînement/validation complète, à la manière de .fit() de Keras/Lightning.
+        """
+        best_loss = float("inf")
+        early_stopper = EarlyStopper(patience=30, delta=0.001)
+        print("Sanity checking the model...")
+        for _batch in val_loader:
+            pass
+        y_val, x_val = _batch
+        y_val, x_val = y_val.to(device), x_val.to(device)
+        _, c, h, w = y_val.shape
+        x_hat, y_hat, *_ = self(x_val, y_val) if hasattr(self, 'conditional_generation') else self(x_val)
+        assert x_hat.shape == x_val.shape, "x_hat shape mismatch"
+        assert y_hat.shape == y_val.shape, "y_hat shape mismatch"
+        print("Model sanity check passed.")
+        print("Computing baseline...")
+        evaluator = SrEvaluator(val_loader, start_epoch, wandb_run)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=15
+        )
+        print("Baseline computed.")
+        evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 1)
+        evaluator.log_images(x_val[:4, :, :, :], "Reconstruction/HR_Original", 1)
+        for epoch in range(start_epoch, epochs + 1):
+            self.train()
+            train_loss = 0
+            train_logs = []
+            for _, batch in tqdm(
+                enumerate(train_loader),
+                total=len(train_loader),
+                desc=f"Training, Epoch {epoch}/{epochs}",
+                unit="batch",
+            ):
+                optimizer.zero_grad()
+                loss, logs = self.train_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
+                loss.backward()
+                train_loss += loss.item()
+                train_logs.append(logs)
+                torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
+                optimizer.step()
+            print(f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}")
+            val_loss = 0
+            val_logs = []
+            self.eval()
+            with torch.no_grad():
+                for _, batch in enumerate(val_loader):
+                    v_loss, vlogs = self.val_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
+                    val_loss += v_loss.item()
+                    val_logs.append(vlogs)
+            scheduler.step(val_loss / len(val_loader))
+            print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
+            if early_stopper(val_loss / len(val_loader.dataset)):
+                print(f"====> Early stopping at epoch {epoch} with loss: {val_loss / len(val_loader.dataset):.4f}")
+                break
+            if val_loss / len(val_loader.dataset) < best_loss:
+                best_loss = val_loss / len(val_loader.dataset)
+                print(f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}")
+                save_dict = {
+                    "epoch": epoch,
+                    "model_state_dict": self.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "gamma": gamma,
+                    "gamma2": gamma2,
+                }
+                torch.save(
+                    save_dict,
+                    f"{'pre_' if pretrain else ''}best_model_{slurm_job_id}.pth",
+                )
+            # Logging images (optionnel, dépend du modèle)
+            if hasattr(self, 'conditional_generation'):
+                evaluator.log_images(
+                    y_hat.view(-1, c, h, w)[:4, :, :, :], "Reconstruction/LR", epoch
+                )
+                evaluator.log_images(
+                    x_hat.view(-1, c, h * 2, w * 2)[:4, :, :, :], "Reconstruction/HR", epoch
+                )
+                if not pretrain:
+                    if epoch % val_metrics_every != 0 and epoch not in [1, epochs]:
+                        conditional_gen = self.conditional_generation(y_val)
+                    else:
+                        conditional_gen = self.conditional_generation(y_val)
+                    evaluator.log_images(
+                        conditional_gen.view(-1, c, h * 2, w * 2)[:4, :, :, :],
+                        "Conditional Generation/HR",
+                        epoch,
+                    )
+            # Logging to wandb (exemple, à adapter selon les logs)
+            if wandb_run is not None:
+                wandb_run.log({"Loss/Total/Train": train_loss / len(train_loader.dataset), "Loss/Total/Validation": val_loss / len(val_loader.dataset)}, step=epoch-1)
+            if torch.isnan(loss):
+                raise ValueError("Loss is NaN, stopping training.")
+        return
+
+
+class VAE(BaseVAE):
     def __init__(self, latent_size):
         super(VAE, self).__init__()
         self.latent_size = latent_size
@@ -68,8 +214,23 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
+    def train_step(self, batch, device, loss_fn, **kwargs):
+        x = batch.to(device)
+        x_hat, mu, logvar = self(x)
+        loss, kld = loss_fn(x_hat, x, mu, logvar, kwargs.get('gamma', torch.tensor(1.0, device=device)))
+        logs = {'loss': loss.item(), 'kld': kld.item()}
+        return loss, logs
 
-class Cond_SRVAE(nn.Module):
+    def val_step(self, batch, device, loss_fn, **kwargs):
+        x = batch.to(device)
+        with torch.no_grad():
+            x_hat, mu, logvar = self(x)
+            loss, kld = loss_fn(x_hat, x, mu, logvar, kwargs.get('gamma', torch.tensor(1.0, device=device)))
+        logs = {'val_loss': loss.item(), 'val_kld': kld.item()}
+        return loss, logs
+
+
+class Cond_SRVAE(BaseVAE):
     def __init__(self, latent_size, patch_size=256):
         super(Cond_SRVAE, self).__init__()
         self.latent_size = latent_size
@@ -310,6 +471,45 @@ class Cond_SRVAE(nn.Module):
             param.requires_grad = True
         for param in self.y_to_z.parameters():
             param.requires_grad = True
+
+    def train_step(self, batch, device, loss_fn, **kwargs):
+        y, x = batch
+        y, x = y.to(device), x.to(device)
+        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self(x, y)
+        mse_x, kld_u, mse_y, kld_z = loss_fn(
+            x_hat, x, y_hat, y, mu_u, logvar_u, mu_z, logvar_z, mu_z_uy, logvar_z_uy,
+            kwargs.get('gamma', torch.tensor(1.0, device=device)),
+            kwargs.get('gamma2', torch.tensor(1.0, device=device))
+        )
+        loss = mse_x + kld_u + mse_y + kld_z if not kwargs.get('pretrain', False) else mse_y + kld_u + mse_x
+        logs = {
+            'loss': loss.item(),
+            'mse_x': mse_x.item(),
+            'kld_u': kld_u.item(),
+            'mse_y': mse_y.item(),
+            'kld_z': kld_z.item()
+        }
+        return loss, logs
+
+    def val_step(self, batch, device, loss_fn, **kwargs):
+        y, x = batch
+        y, x = y.to(device), x.to(device)
+        with torch.no_grad():
+            x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self(x, y)
+            mse_x, kld_u, mse_y, kld_z = loss_fn(
+                x_hat, x, y_hat, y, mu_u, logvar_u, mu_z, logvar_z, mu_z_uy, logvar_z_uy,
+                kwargs.get('gamma', torch.tensor(1.0, device=device)),
+                kwargs.get('gamma2', torch.tensor(1.0, device=device))
+            )
+            loss = mse_x + kld_u + mse_y + kld_z if not kwargs.get('pretrain', False) else mse_y + kld_u + mse_x
+        logs = {
+            'val_loss': loss.item(),
+            'val_mse_x': mse_x.item(),
+            'val_kld_u': kld_u.item(),
+            'val_mse_y': mse_y.item(),
+            'val_kld_z': kld_z.item()
+        }
+        return loss, logs
 
 
 if __name__ == "__main__":
