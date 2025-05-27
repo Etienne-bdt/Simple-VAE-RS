@@ -57,10 +57,14 @@ def test(device, model: Cond_SRVAE, val_loader):
     plt.subplot(2, 4, 7)
     plt.imshow(std, cmap="hot")
     plt.colorbar()
-    plt.title("Standard Deviation of Samples")
+    plt.title(f"Standard Deviation of Samples, Mean: {std.mean():.2f}")
+    plt.subplot(2, 4, 8)
+    mean_bias = (x - samples.mean(dim=0)).mean(dim=0).cpu().numpy()
+    plt.imshow(mean_bias, cmap="hot")
+    plt.colorbar()
+    plt.title(f"Mean Bias Map, Mean: {mean_bias.mean():.2f}")
     plt.savefig(f"results/{slurm_job_id}/error_mean_std_maps.png", bbox_inches="tight")
     plt.close()
-
     MMSE = (samples - x).pow(2).mean()
     print(f"MMSE: {MMSE:.4f}")
 

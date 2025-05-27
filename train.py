@@ -281,7 +281,9 @@ def main(args):
     train_loader, val_loader = init_dataloader(
         args.dataset, args.batch_size, args.patch_size
     )
-    latent_size = 10000
+    latent_size = args.latent_size
+    if latent_size <= 0:
+        raise ValueError("Latent size must be a positive integer.")
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
@@ -383,6 +385,10 @@ def parse_args():
         type=int,
         default=5,
         help="Number of epochs between validation metrics computation.",
+    )
+
+    parser.add_argument(
+        "-l", "--latent_size", type=int, default=10000, help="Size of the latent space."
     )
 
     return parser.parse_args()
