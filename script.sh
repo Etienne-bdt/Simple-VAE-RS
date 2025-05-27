@@ -17,4 +17,4 @@ source .venv/bin/activate
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
-python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --val_metrics_every 20 --epochs 500
+python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --val_metrics_every 20 --epochs 500 -l 10000
