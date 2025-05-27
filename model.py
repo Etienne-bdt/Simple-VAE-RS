@@ -1,31 +1,94 @@
+import abc
+
 import torch
 import torch.nn as nn
-import abc
-from utils import EarlyStopper, SrEvaluator
-from loss import cond_loss
 import wandb
 from tqdm import tqdm
+
+from utils import EarlyStopper, SrEvaluator
 
 
 class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
     """
-    Classe de base pour tous les VAE. Définit l'interface commune pour l'entraînement et la validation.
+    Base class for all VAEs. Defines the common interface for training and validation.
     """
+
     def __init__(self):
         super().__init__()
+        self.optimizer: torch.optim.Optimizer = torch.optim.Adam(
+            self.parameters(), lr=1e-3
+        )
+        # Scheduler to reduce learning rate on plateau
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.5, patience=30
+        )
+        self.latent_size: int = 0
+        self.patch_size: int = 0
+        self.early_stopper = EarlyStopper(patience=30, delta=0.01)
+
+    def fit(self, train_loader, val_loader, device, epochs=1000, **kwargs):
+        """
+        Fit the model to the training data.
+        Args:
+            train_loader: DataLoader for training data
+            val_loader: DataLoader for validation data
+            device: device to use for training (e.g., 'cuda' or 'cpu')
+            epochs: number of epochs to train
+        """
+        start_epoch = kwargs.get("start_epoch", 1)
+        wandb_run = wandb.init(
+            project=self.__class__.__name__,
+            name=f"Latent-{self.latent_size}-Patch-{self.patch_size}-SLURM-{kwargs.get('slurm_job_id', 'local')}",
+            entity="ebardet-isae-supaero",
+            config=kwargs.get("config", {}),
+        )
+
+        self.evaluator = SrEvaluator(val_loader, start_epoch, wandb_run=wandb_run)
+
+        optimizer = self.optimizer
+        for epoch in range(epochs):
+            self.train()
+            train_loss = 0.0
+            for _, batch in tqdm(
+                enumerate(train_loader),
+                total=len(train_loader),
+                desc=f"Training, Epoch {epoch}/{epochs}",
+                unit="batch",
+            ):
+                optimizer.zero_grad()
+                loss, terms = self.train_step(batch, device)
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+
+            train_loss /= len(train_loader)
+
+            self.eval()
+
+    @abc.abstractmethod
+    def loss_fn(self, *args, **kwargs):
+        """
+        Abstract method to define the loss function.
+        Args:
+            args: arguments required to compute the loss
+            kwargs: optional arguments
+        Returns:
+            loss: (torch.Tensor) computed loss value
+            logs: (dict) dictionary of individual loss components
+        """
+        pass
 
     @abc.abstractmethod
     def forward(self, *args, **kwargs):
         pass
 
     @abc.abstractmethod
-    def train_step(self, batch, device, loss_fn, **kwargs):
+    def train_step(self, batch, device, **kwargs):
         """
-        Effectue une étape d'entraînement sur un batch.
+        Performs a training step on a batch.
         Args:
-            batch: batch de données
-            device: device utilisé
-            loss_fn: fonction de perte
+            batch: data batch
+            device: device to use
         Returns:
             loss, logs (dict)
         """
@@ -34,118 +97,29 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def val_step(self, batch, device, loss_fn, **kwargs):
         """
-        Effectue une étape de validation sur un batch.
+        Performs a validation step on a batch.
         Args:
-            batch: batch de données
-            device: device utilisé
-            loss_fn: fonction de perte
+            batch: data batch
+            device: device to use
+            loss_fn: loss function
         Returns:
             loss, logs (dict)
         """
         pass
 
-    def log(self, logs, step=None):
+    def log(self, wandb_run, logs, step=None):
         """
-        Méthode optionnelle pour logger des informations spécifiques au modèle.
+        Optional method to log model-specific information.
         Args:
-            logs: dictionnaire de valeurs à logger
-            step: étape courante (optionnel)
+            wandb_run: wandb run instance for logging
+            logs: dictionary of values to log
+            step: current step (optional)
         """
-        pass
-
-    def fit(self, train_loader, val_loader, optimizer, epochs, device, gamma, gamma2, start_epoch=1, pretrain=False, val_metrics_every=5, slurm_job_id=None, wandb_run=None):
-        """
-        Boucle d'entraînement/validation complète, à la manière de .fit() de Keras/Lightning.
-        """
-        best_loss = float("inf")
-        early_stopper = EarlyStopper(patience=30, delta=0.001)
-        print("Sanity checking the model...")
-        for _batch in val_loader:
-            pass
-        y_val, x_val = _batch
-        y_val, x_val = y_val.to(device), x_val.to(device)
-        _, c, h, w = y_val.shape
-        x_hat, y_hat, *_ = self(x_val, y_val) if hasattr(self, 'conditional_generation') else self(x_val)
-        assert x_hat.shape == x_val.shape, "x_hat shape mismatch"
-        assert y_hat.shape == y_val.shape, "y_hat shape mismatch"
-        print("Model sanity check passed.")
-        print("Computing baseline...")
-        evaluator = SrEvaluator(val_loader, start_epoch, wandb_run)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, patience=15
-        )
-        print("Baseline computed.")
-        evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 1)
-        evaluator.log_images(x_val[:4, :, :, :], "Reconstruction/HR_Original", 1)
-        for epoch in range(start_epoch, epochs + 1):
-            self.train()
-            train_loss = 0
-            train_logs = []
-            for _, batch in tqdm(
-                enumerate(train_loader),
-                total=len(train_loader),
-                desc=f"Training, Epoch {epoch}/{epochs}",
-                unit="batch",
-            ):
-                optimizer.zero_grad()
-                loss, logs = self.train_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
-                loss.backward()
-                train_loss += loss.item()
-                train_logs.append(logs)
-                torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
-                optimizer.step()
-            print(f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}")
-            val_loss = 0
-            val_logs = []
-            self.eval()
-            with torch.no_grad():
-                for _, batch in enumerate(val_loader):
-                    v_loss, vlogs = self.val_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
-                    val_loss += v_loss.item()
-                    val_logs.append(vlogs)
-            scheduler.step(val_loss / len(val_loader))
-            print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
-            if early_stopper(val_loss / len(val_loader.dataset)):
-                print(f"====> Early stopping at epoch {epoch} with loss: {val_loss / len(val_loader.dataset):.4f}")
-                break
-            if val_loss / len(val_loader.dataset) < best_loss:
-                best_loss = val_loss / len(val_loader.dataset)
-                print(f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}")
-                save_dict = {
-                    "epoch": epoch,
-                    "model_state_dict": self.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "gamma": gamma,
-                    "gamma2": gamma2,
-                }
-                torch.save(
-                    save_dict,
-                    f"{'pre_' if pretrain else ''}best_model_{slurm_job_id}.pth",
-                )
-            # Logging images (optionnel, dépend du modèle)
-            if hasattr(self, 'conditional_generation'):
-                evaluator.log_images(
-                    y_hat.view(-1, c, h, w)[:4, :, :, :], "Reconstruction/LR", epoch
-                )
-                evaluator.log_images(
-                    x_hat.view(-1, c, h * 2, w * 2)[:4, :, :, :], "Reconstruction/HR", epoch
-                )
-                if not pretrain:
-                    if epoch % val_metrics_every != 0 and epoch not in [1, epochs]:
-                        conditional_gen = self.conditional_generation(y_val)
-                    else:
-                        conditional_gen = self.conditional_generation(y_val)
-                    evaluator.log_images(
-                        conditional_gen.view(-1, c, h * 2, w * 2)[:4, :, :, :],
-                        "Conditional Generation/HR",
-                        epoch,
-                    )
-            # Logging to wandb (exemple, à adapter selon les logs)
-            if wandb_run is not None:
-                wandb_run.log({"Loss/Total/Train": train_loss / len(train_loader.dataset), "Loss/Total/Validation": val_loss / len(val_loader.dataset)}, step=epoch-1)
-            if torch.isnan(loss):
-                raise ValueError("Loss is NaN, stopping training.")
-        return
+        if not wandb_run:
+            print("WandB run not initialized, skipping logging.")
+            return
+        if step is not None:
+            wandb_run.log(logs, step=step)
 
 
 class VAE(BaseVAE):
@@ -179,14 +153,6 @@ class VAE(BaseVAE):
             nn.Sigmoid(),
         )
         # 4 output channels (same as input)
-        self._initialize_weights()  # Add weight initialization
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
 
     def encode(self, x):
         # Define the encoder part of the VAE
@@ -217,16 +183,24 @@ class VAE(BaseVAE):
     def train_step(self, batch, device, loss_fn, **kwargs):
         x = batch.to(device)
         x_hat, mu, logvar = self(x)
-        loss, kld = loss_fn(x_hat, x, mu, logvar, kwargs.get('gamma', torch.tensor(1.0, device=device)))
-        logs = {'loss': loss.item(), 'kld': kld.item()}
+        loss, kld = loss_fn(
+            x_hat, x, mu, logvar, kwargs.get("gamma", torch.tensor(1.0, device=device))
+        )
+        logs = {"loss": loss.item(), "kld": kld.item()}
         return loss, logs
 
     def val_step(self, batch, device, loss_fn, **kwargs):
         x = batch.to(device)
         with torch.no_grad():
             x_hat, mu, logvar = self(x)
-            loss, kld = loss_fn(x_hat, x, mu, logvar, kwargs.get('gamma', torch.tensor(1.0, device=device)))
-        logs = {'val_loss': loss.item(), 'val_kld': kld.item()}
+            loss, kld = loss_fn(
+                x_hat,
+                x,
+                mu,
+                logvar,
+                kwargs.get("gamma", torch.tensor(1.0, device=device)),
+            )
+        logs = {"val_loss": loss.item(), "val_kld": kld.item()}
         return loss, logs
 
 
@@ -477,17 +451,30 @@ class Cond_SRVAE(BaseVAE):
         y, x = y.to(device), x.to(device)
         x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self(x, y)
         mse_x, kld_u, mse_y, kld_z = loss_fn(
-            x_hat, x, y_hat, y, mu_u, logvar_u, mu_z, logvar_z, mu_z_uy, logvar_z_uy,
-            kwargs.get('gamma', torch.tensor(1.0, device=device)),
-            kwargs.get('gamma2', torch.tensor(1.0, device=device))
+            x_hat,
+            x,
+            y_hat,
+            y,
+            mu_u,
+            logvar_u,
+            mu_z,
+            logvar_z,
+            mu_z_uy,
+            logvar_z_uy,
+            kwargs.get("gamma", torch.tensor(1.0, device=device)),
+            kwargs.get("gamma2", torch.tensor(1.0, device=device)),
         )
-        loss = mse_x + kld_u + mse_y + kld_z if not kwargs.get('pretrain', False) else mse_y + kld_u + mse_x
+        loss = (
+            mse_x + kld_u + mse_y + kld_z
+            if not kwargs.get("pretrain", False)
+            else mse_y + kld_u + mse_x
+        )
         logs = {
-            'loss': loss.item(),
-            'mse_x': mse_x.item(),
-            'kld_u': kld_u.item(),
-            'mse_y': mse_y.item(),
-            'kld_z': kld_z.item()
+            "loss": loss.item(),
+            "mse_x": mse_x.item(),
+            "kld_u": kld_u.item(),
+            "mse_y": mse_y.item(),
+            "kld_z": kld_z.item(),
         }
         return loss, logs
 
@@ -495,19 +482,34 @@ class Cond_SRVAE(BaseVAE):
         y, x = batch
         y, x = y.to(device), x.to(device)
         with torch.no_grad():
-            x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self(x, y)
-            mse_x, kld_u, mse_y, kld_z = loss_fn(
-                x_hat, x, y_hat, y, mu_u, logvar_u, mu_z, logvar_z, mu_z_uy, logvar_z_uy,
-                kwargs.get('gamma', torch.tensor(1.0, device=device)),
-                kwargs.get('gamma2', torch.tensor(1.0, device=device))
+            x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self(
+                x, y
             )
-            loss = mse_x + kld_u + mse_y + kld_z if not kwargs.get('pretrain', False) else mse_y + kld_u + mse_x
+            mse_x, kld_u, mse_y, kld_z = loss_fn(
+                x_hat,
+                x,
+                y_hat,
+                y,
+                mu_u,
+                logvar_u,
+                mu_z,
+                logvar_z,
+                mu_z_uy,
+                logvar_z_uy,
+                kwargs.get("gamma", torch.tensor(1.0, device=device)),
+                kwargs.get("gamma2", torch.tensor(1.0, device=device)),
+            )
+            loss = (
+                mse_x + kld_u + mse_y + kld_z
+                if not kwargs.get("pretrain", False)
+                else mse_y + kld_u + mse_x
+            )
         logs = {
-            'val_loss': loss.item(),
-            'val_mse_x': mse_x.item(),
-            'val_kld_u': kld_u.item(),
-            'val_mse_y': mse_y.item(),
-            'val_kld_z': kld_z.item()
+            "val_loss": loss.item(),
+            "val_mse_x": mse_x.item(),
+            "val_kld_u": kld_u.item(),
+            "val_mse_y": mse_y.item(),
+            "val_kld_z": kld_z.item(),
         }
         return loss, logs
 

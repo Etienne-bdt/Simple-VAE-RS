@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 
-def loss_function(recon_x, x, mu, logvar, gamma):
+def base_loss(recon_x, x, mu, logvar, gamma):
     # Define the loss function for the VAE
     # Gamma is the variance of the prior
     d = mu.size(1)
