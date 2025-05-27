@@ -13,8 +13,8 @@
 
 module load python/3.8
 
-source activate vae-rs
+source .venv/bin/activate
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
-python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --test --model_ckpt "best_model_3847955.pth"
+python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --test --model_ckpt "best_model_3850701.pth"

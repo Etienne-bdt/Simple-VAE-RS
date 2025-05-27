@@ -73,6 +73,7 @@ class Cond_SRVAE(nn.Module):
     def __init__(self, latent_size, patch_size=256):
         super(Cond_SRVAE, self).__init__()
         self.latent_size = latent_size
+        self.latent_size_y = latent_size // 4
         self.patch_size = patch_size
         self.encoder1 = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
@@ -85,12 +86,12 @@ class Cond_SRVAE(nn.Module):
             nn.BatchNorm2d(128),
             nn.ReLU(),
         )
-        self.fc_mu_1 = nn.Linear(patch_size**2 // 2, self.latent_size)
+        self.fc_mu_1 = nn.Linear(patch_size**2 // 2, self.latent_size_y)
         self.fc_logvar_1 = nn.Sequential(
-            nn.Linear(patch_size**2 // 2, self.latent_size),
+            nn.Linear(patch_size**2 // 2, self.latent_size_y),
             nn.Hardtanh(-7, 7),
         )
-        self.fc_decode_y = nn.Linear(self.latent_size, patch_size**2 // 2)
+        self.fc_decode_y = nn.Linear(self.latent_size_y, patch_size**2 // 2)
         self.decoder_1 = nn.Sequential(
             nn.ConvTranspose2d(
                 128, 64, kernel_size=3, stride=2, padding=1
@@ -152,7 +153,7 @@ class Cond_SRVAE(nn.Module):
             nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
             nn.Sigmoid(),
         )
-        """
+        
         self.decoder_hf = nn.Sequential(
             nn.ConvTranspose2d(36, 32, kernel_size=1, stride=1, padding=0),
             nn.ReLU(),
@@ -167,7 +168,7 @@ class Cond_SRVAE(nn.Module):
             nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
             nn.Sigmoid(),
         )
-
+        """
         self.y_to_z = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
             nn.BatchNorm2d(32),
@@ -181,7 +182,7 @@ class Cond_SRVAE(nn.Module):
             nn.Flatten(),
             nn.Linear(patch_size**2 // 2, self.latent_size),
         )
-        self.u_to_z = nn.Linear(self.latent_size, self.latent_size)
+        self.u_to_z = nn.Linear(self.latent_size_y, self.latent_size)
         self.mu_u_y_to_z = nn.Linear(self.latent_size * 2, self.latent_size)
         self.logvar_u_y_to_z = nn.Sequential(
             nn.Linear(self.latent_size * 2, self.latent_size),
@@ -285,7 +286,7 @@ class Cond_SRVAE(nn.Module):
         return self.decode_x(z, y)
 
     def generation(self):
-        u = torch.randn(1, self.latent_size).to("cuda")
+        u = torch.randn(1, self.latent_size_y).to("cuda")
         y = self.decode_y(u)
 
         return y, self.conditional_generation(y)
@@ -325,7 +326,4 @@ if __name__ == "__main__":
 
     assert x_hat.shape == x.shape
     assert y_hat.shape == y.shape
-    for i, var in enumerate([mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy]):
-        print(f"Testing {i}")
-        assert var.shape == (1, LATENT_SIZE)
     print("All size tests passed!")

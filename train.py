@@ -59,7 +59,7 @@ def train(
     evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
     writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=30
+        optimizer, mode="min", factor=0.5, patience=15
     )  # Initialize learning rate scheduler
     print("Baseline computed.")
 
@@ -300,12 +300,12 @@ def main(args):
         print("Loading optimizer state...")
         gamma = save_dict["gamma"]
         gamma2 = save_dict["gamma2"]
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         optimizer.add_param_group({"params": [gamma, gamma2]})
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         start_epoch = 1
         gamma = torch.tensor([1.0]).to(device)
         gamma2 = torch.tensor([1.0]).to(device)
@@ -314,7 +314,7 @@ def main(args):
         optimizer.add_param_group({"params": [gamma, gamma2]})
     # Lower learning rate for the conditional part
     for param_group in optimizer.param_groups:
-        param_group["lr"] = 5e-4
+        param_group["lr"] = 1e-3
 
     if not (args.test and args.model_ckpt):
         train(
