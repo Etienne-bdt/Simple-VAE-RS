@@ -3,8 +3,8 @@ import os
 import lpips
 import torch
 import torch.nn.functional as F
+import wandb
 from skimage.metrics import structural_similarity as ssim
-from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import tqdm
 
 
@@ -73,17 +73,17 @@ class SrEvaluator:
     Args:
         y_val (torch.Tensor): Low-resolution images.
         x_val (torch.Tensor): High-resolution images.
-        writer (SummaryWriter): TensorBoard writer.
+        wandb_run: WandB run.
         start_epoch (int): Current epoch number.
     """
 
-    def __init__(self, val_loader, start_epoch):
+    def __init__(self, val_loader, start_epoch, wandb_run):
         """
         Initialize the SR_Evaluator class.
         """
         self.val_loader = val_loader
         self.len_val = len(val_loader)
-        self.writer = SummaryWriter()
+        self.wandb_run = wandb_run
         self.start_epoch = start_epoch
         self.lpips_loss = lpips.LPIPS(net="alex").cuda()
         self.ssim = ssim
@@ -97,24 +97,31 @@ class SrEvaluator:
             pass
         y_val, x_val = _batch
         hr_interp = F.interpolate(y_val[:4, :, :, :], scale_factor=2, mode="bicubic")
-        self.writer.add_images(
-            "Conditional Generation/HR Interpolated",
-            hr_interp[:, [2, 1, 0], :, :],
-            global_step=self.start_epoch,
-            dataformats="NCHW",
-        )
-
-        self.writer.add_images(
-            "Conditional Generation/HR_Original",
-            x_val[:4, [2, 1, 0], :, :],
-            global_step=self.start_epoch,
-            dataformats="NCHW",
-        )
-        self.writer.add_images(
-            "Conditional Generation/LR_Original",
-            y_val[:4, [2, 1, 0], :, :],
-            global_step=self.start_epoch,
-            dataformats="NCHW",
+        self.wandb_run.log(
+            {
+                "Conditional Generation/HR Interpolated": [
+                    wandb.Image(
+                        hr_interp[i].permute(1, 2, 0).cpu().numpy(),
+                        caption=f"HR Interpolated {i}",
+                    )
+                    for i in range(hr_interp.shape[0])
+                ],
+                "Conditional Generation/HR_Original": [
+                    wandb.Image(
+                        x_val[i].permute(1, 2, 0).cpu().numpy(),
+                        caption=f"HR Original {i}",
+                    )
+                    for i in range(max(y_val.shape[0], 4))
+                ],
+                "Conditional Generation/LR_Original": [
+                    wandb.Image(
+                        y_val[i].permute(1, 2, 0).cpu().numpy(),
+                        caption=f"LR Original {i}",
+                    )
+                    for i in range(max(y_val.shape[0], 4))
+                ],
+            },
+            step=self.start_epoch,
         )
         ssim_cumu, lpips_cumu = 0, 0
         if not os.path.exists("baseline_ckpt.pth"):
@@ -169,7 +176,6 @@ class SrEvaluator:
             )
             lpips_score += lpips_s
             ssim_score += ssim_s
-        ssim_score = ssim_score
         ssim_score = torch.tensor(ssim_score) / (b * self.len_val)
 
         lpips_score = lpips_score / (b * self.len_val)
@@ -177,15 +183,20 @@ class SrEvaluator:
 
     def log_images(self, img, category, epoch):
         """
-        Log the images to TensorBoard.
+        Log the images to WandB.
         Args:
             img (torch.Tensor): Image tensor to log.
             category (str): Category of the image.
             epoch (int): Current epoch number.
         """
-        self.writer.add_images(
-            category,
-            img[:4, [2, 1, 0], :, :],
-            global_step=epoch,
-            dataformats="NCHW",
+        self.wandb_run.log(
+            {
+                category: [
+                    wandb.Image(
+                        img[i].permute(1, 2, 0).cpu().numpy(), caption=f"{category} {i}"
+                    )
+                    for i in range(img.shape[0])
+                ]
+            },
+            step=epoch,
         )

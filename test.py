@@ -21,7 +21,7 @@ def test(device, model: Cond_SRVAE, val_loader):
     model.eval()
     batch = next(iter(val_loader))
     y, x = batch
-    y, x = y[0:1, :, :, :].to(device), x[0:1, :, :, :].to(device)
+    y, x = y[1:2, :, :, :].to(device), x[1:2, :, :, :].to(device)
 
     with torch.no_grad():
         samples = model.sample(y, samples=1000)

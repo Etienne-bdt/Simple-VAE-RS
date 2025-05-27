@@ -3,6 +3,7 @@ import os
 import time
 
 import torch
+import wandb
 from tqdm import tqdm
 
 from dataset import init_dataloader
@@ -21,6 +22,7 @@ def train(
     gamma2,
     optimizer,
     epochs,
+    wandb_run,
     start_epoch=1,
     pretrain=False,
     bands=None,
@@ -56,8 +58,7 @@ def train(
     assert y_hat.shape == y_val.shape, "y_hat shape mismatch"
     print("Model sanity check passed.")
     print("Computing baseline...")
-    evaluator = SrEvaluator(val_loader, start_epoch)  # Initialize evaluator
-    writer = evaluator.writer  # Get the TensorBoard writer from the evaluator
+    evaluator = SrEvaluator(val_loader, start_epoch, wandb_run)  # Initialize evaluator
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=15
     )  # Initialize learning rate scheduler
@@ -221,54 +222,41 @@ def train(
                 "Conditional Generation/HR",
                 epoch,
             )
-        # Log to TensorBoard
-        writer.add_scalar(
-            "Loss/KLD_u/Train", tot_kld_u / len(train_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/KLD_u/Validation", val_tot_kld_u / len(val_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/KLD_z/Train", tot_kld_z / len(train_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/KLD_z/Validation", val_tot_kld_z / len(val_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/MSE_y/Train", tot_mse_y / len(train_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/MSE_y/Validation", val_tot_mse_y / len(val_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/MSE_x/Train", tot_mse_x / len(train_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/MSE_x/Validation", val_tot_mse_x / len(val_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/Total/Train", train_loss / len(train_loader.dataset), epoch
-        )
-        writer.add_scalar(
-            "Loss/Total/Validation", val_loss / len(val_loader.dataset), epoch
+        # Log to WandB
+        wandb_run.log(
+            {
+                "Loss/KLD_u/Train": tot_kld_u / len(train_loader.dataset),
+                "Loss/KLD_u/Validation": val_tot_kld_u / len(val_loader.dataset),
+                "Loss/KLD_z/Train": tot_kld_z / len(train_loader.dataset),
+                "Loss/KLD_z/Validation": val_tot_kld_z / len(val_loader.dataset),
+                "Loss/MSE_y/Train": tot_mse_y / len(train_loader.dataset),
+                "Loss/MSE_y/Validation": val_tot_mse_y / len(val_loader.dataset),
+                "Loss/MSE_x/Train": tot_mse_x / len(train_loader.dataset),
+                "Loss/MSE_x/Validation": val_tot_mse_x / len(val_loader.dataset),
+                "Loss/Total/Train": train_loss / len(train_loader.dataset),
+                "Loss/Total/Validation": val_loss / len(val_loader.dataset),
+                "Gamma/Gamma_y": gamma2.item(),
+                "Gamma/Gamma_x": gamma.item(),
+                "Learning Rate": optimizer.param_groups[0]["lr"],
+            },
+            step=epoch,
         )
         if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
-            writer.add_scalar("Metrics/SSIM/Baseline", evaluator.ssim_base, epoch)
-            writer.add_scalar("Metrics/SSIM/Recon_LR", val_recon_ssim_lr, epoch)
-            writer.add_scalar("Metrics/SSIM/Recon_HR", val_recon_ssim_hr, epoch)
-            writer.add_scalar("Metrics/SSIM/SR", val_tot_ssim, epoch)
-            writer.add_scalar("Metrics/LPIPS/Baseline", evaluator.lpips_base, epoch)
-            writer.add_scalar("Metrics/LPIPS/Recon_LR", val_recon_lpips_lr, epoch)
-            writer.add_scalar("Metrics/LPIPS/Recon_HR", val_recon_lpips_hr, epoch)
-            writer.add_scalar("Metrics/LPIPS/SR", val_tot_lpips, epoch)
-
-        writer.add_scalar("Gamma/Gamma_y", gamma2.item(), epoch)
-        writer.add_scalar("Gamma/Gamma_x", gamma.item(), epoch)
-        writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
+            wandb_run.log(
+                {
+                    "Metrics/SSIM/Baseline": evaluator.ssim_base,
+                    "Metrics/SSIM/Recon_LR": val_recon_ssim_lr,
+                    "Metrics/SSIM/Recon_HR": val_recon_ssim_hr,
+                    "Metrics/SSIM/SR": val_tot_ssim,
+                    "Metrics/LPIPS/Baseline": evaluator.lpips_base,
+                    "Metrics/LPIPS/Recon_LR": val_recon_lpips_lr,
+                    "Metrics/LPIPS/Recon_HR": val_recon_lpips_hr,
+                    "Metrics/LPIPS/SR": val_tot_lpips,
+                },
+                step=epoch,
+            )
         if torch.isnan(loss):
             raise ValueError("Loss is NaN, stopping training.")
-
-    writer.close()  # Close the TensorBoard writer
     return
 
 
@@ -292,6 +280,20 @@ def main(args):
     model = Cond_SRVAE(latent_size, args.patch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
+
+    run = wandb.init(
+        project="Cond_SRVAE",
+        entity="ebardet-isae-supaero",
+        name=f"Cond_SRVAE_latent_{latent_size}_patch_{args.patch_size}_{slurm_job_id}",
+        config={
+            "latent_size": latent_size,
+            "patch_size": args.patch_size,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size * (256 // args.patch_size) ** 2,
+            "slurm_job_id": slurm_job_id,
+        },
+        dir=results_dir,
+    )
 
     if args.model_ckpt:
         print("Loading model from checkpoint...")
@@ -332,6 +334,7 @@ def main(args):
             pretrain=False,
             val_metrics_every=args.val_metrics_every,
             slurm_job_id=slurm_job_id,
+            wandb_run=run,
         )
 
     test(device, model, val_loader)
