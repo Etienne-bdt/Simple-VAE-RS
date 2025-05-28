@@ -4,9 +4,9 @@ from typing import List
 import lpips
 import torch
 import torch.nn as nn
+import wandb
 from skimage import metrics as skmetrics
 from tqdm import tqdm
-import wandb
 
 from callbacks import Callback
 
