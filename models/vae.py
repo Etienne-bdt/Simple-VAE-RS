@@ -70,14 +70,17 @@ class VAE(BaseVAE):
         return self.decode(z), mu, logvar
 
     def train_step(self, batch, device):
-        x = batch.to(device)
+        x, _ = batch
+        print(self.gamma)
+        x = x.to(device)
         x_hat, mu, logvar = self.forward(x)
         loss, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
         logs = {"loss": loss.item(), "kld": kld.item()}
         return loss, logs
 
     def val_step(self, batch, device):
-        x = batch.to(device)
+        x, _ = batch
+        x = x.to(device)
         with torch.no_grad():
             x_hat, mu, logvar = self.forward(x)
             loss, kld = base_loss(
@@ -100,8 +103,9 @@ class VAE(BaseVAE):
         total_lpips = 0.0
         first_batch = True
 
-        for xb in val_loader:
-            x = xb.to(device)
+        for batch in val_loader:
+            x, _ = batch
+            x = x.to(device)
             with torch.no_grad():
                 x_hat, _, _ = self.forward(x)
 
@@ -161,4 +165,5 @@ class VAE(BaseVAE):
         )
 
     def on_train_start(self, **kwargs):
-        return super().on_train_start(**kwargs)
+        self.gamma.requires_grad = True
+        self.optimizer.add_param_group({"params": [self.gamma]})

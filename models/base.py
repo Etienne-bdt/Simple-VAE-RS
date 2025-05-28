@@ -44,6 +44,9 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         self.lpips_fn.eval()
         start_epoch = kwargs.get("start_epoch", 1)
         val_metrics_every = kwargs.get("val_metrics_every", float("inf"))
+        x, _ = next(iter(train_loader))
+        b = x.size(0)
+
         self.wandb_run = wandb.init(
             project=self.__class__.__name__,
             name=f"Latent-{self.latent_size}-Patch-{self.patch_size}-SLURM-{kwargs.get('slurm_job_id', 'local')}",
@@ -54,7 +57,9 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     "latent_size": self.latent_size,
                     "patch_size": self.patch_size,
                     "epochs": epochs,
-                    "optimizer": str(optimizer),
+                    "batch_size": b,
+                    "val_metrics_every": val_metrics_every,
+                    "slurm_job_id": kwargs.get("slurm_job_id", "local"),
                 },
             ),
         )

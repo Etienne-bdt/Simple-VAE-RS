@@ -404,6 +404,13 @@ class Cond_SRVAE(BaseVAE):
         )
 
     def on_train_start(self, **kwargs):
+        self.gammax.requires_grad = True
+        self.gammay.requires_grad = True
+        self.optimizer.add_param_group(
+            {
+                "params": [self.gammax, self.gammay],
+            }
+        )
         val_loader = self.val_loader
         if val_loader is None:
             raise ValueError(
