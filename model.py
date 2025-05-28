@@ -1,11 +1,12 @@
 import abc
+from typing import List
 
 import torch
 import torch.nn as nn
 import wandb
 from tqdm import tqdm
 
-from utils import EarlyStopper, SrEvaluator
+from callbacks import Callback
 
 
 class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
@@ -24,7 +25,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         )
         self.latent_size: int = 0
         self.patch_size: int = 0
-        self.early_stopper = EarlyStopper(patience=30, delta=0.01)
+        self.callbacks: List[Callback] = []
 
     def fit(self, train_loader, val_loader, device, epochs=1000, **kwargs):
         """
@@ -36,6 +37,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             epochs: number of epochs to train
         """
         start_epoch = kwargs.get("start_epoch", 1)
+        val_metrics_every = kwargs.get("val_metrics_every", float("inf"))
         wandb_run = wandb.init(
             project=self.__class__.__name__,
             name=f"Latent-{self.latent_size}-Patch-{self.patch_size}-SLURM-{kwargs.get('slurm_job_id', 'local')}",
@@ -43,12 +45,19 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             config=kwargs.get("config", {}),
         )
 
-        self.evaluator = SrEvaluator(val_loader, start_epoch, wandb_run=wandb_run)
-
         optimizer = self.optimizer
-        for epoch in range(epochs):
+        for epoch in range(start_epoch, epochs + 1):
+            for cb in self.callbacks:
+                if cb.on_epoch_begin(
+                    epoch=epoch, optimizer=optimizer, device=device, model=self
+                ):
+                    print(
+                        f"Stopping training before epoch {epoch} due to {cb.__class__.__name__} condition."
+                    )
+                    return  # Stop training if callback indicates to stop
             self.train()
             train_loss = 0.0
+            terms_dict = {}
             for _, batch in tqdm(
                 enumerate(train_loader),
                 total=len(train_loader),
@@ -59,11 +68,70 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                 loss, terms = self.train_step(batch, device)
                 loss.backward()
                 optimizer.step()
+                if not terms_dict:
+                    terms_dict = terms
+                else:
+                    for key, value in terms.items():
+                        if key in terms_dict:
+                            terms_dict[key] += value
+                        else:
+                            terms_dict[key] = value
                 train_loss += loss.item()
+
+            # Average the loss terms
+            for key in terms_dict:
+                terms_dict[key] /= len(train_loader)
 
             train_loss /= len(train_loader)
 
+            self.log(wandb_run, terms_dict, step=epoch)
+
             self.eval()
+            val_loss = 0.0
+            val_terms_dict = {}
+            with torch.no_grad():
+                for _, batch in tqdm(
+                    enumerate(val_loader),
+                    total=len(val_loader),
+                    desc=f"Validation, Epoch {epoch}/{epochs}",
+                    unit="batch",
+                ):
+                    loss, terms = self.val_step(batch, device)
+                    if not val_terms_dict:
+                        val_terms_dict = terms
+                    else:
+                        for key, value in terms.items():
+                            if key in val_terms_dict:
+                                val_terms_dict[key] += value
+                            else:
+                                val_terms_dict[key] = value
+
+                    val_loss += loss.item()
+
+                if epoch % val_metrics_every == 0 or [1, epochs]:
+                    self.evaluate(val_loader, wandb_run, epoch)
+
+            # Average the validation loss terms
+            for key in val_terms_dict:
+                val_terms_dict[key] /= len(val_loader)
+
+            val_loss /= len(val_loader)
+            self.scheduler.step(val_loss)
+            self.log(wandb_run, val_terms_dict, step=epoch)
+            for cb in self.callbacks:
+                if cb.on_epoch_end(
+                    epoch=epoch, optimizer=optimizer, device=device, model=self
+                ):
+                    print(
+                        f"Stopping training after epoch {epoch} due to {cb.__class__.__name__} condition."
+                    )
+                    return  # Stop training if callback indicates to stop
+
+            print(
+                f"Epoch {epoch}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}"
+            )
+
+        wandb_run.finish()
 
     @abc.abstractmethod
     def loss_fn(self, *args, **kwargs):
@@ -76,11 +144,14 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             loss: (torch.Tensor) computed loss value
             logs: (dict) dictionary of individual loss components
         """
-        pass
+        raise NotImplementedError("loss_fn must be implemented in the derived class.")
 
     @abc.abstractmethod
     def forward(self, *args, **kwargs):
-        pass
+        """
+        Abstract method for the forward pass of the model.
+        """
+        raise NotImplementedError("forward must be implemented in the derived class.")
 
     @abc.abstractmethod
     def train_step(self, batch, device, **kwargs):
@@ -92,10 +163,12 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         Returns:
             loss, logs (dict)
         """
-        pass
+        raise NotImplementedError(
+            "train_step must be implemented in the derived class."
+        )
 
     @abc.abstractmethod
-    def val_step(self, batch, device, loss_fn, **kwargs):
+    def val_step(self, batch, device, **kwargs):
         """
         Performs a validation step on a batch.
         Args:
@@ -105,9 +178,20 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         Returns:
             loss, logs (dict)
         """
-        pass
+        raise NotImplementedError("val_step must be implemented in the derived class.")
 
-    def log(self, wandb_run, logs, step=None):
+    @abc.abstractmethod
+    def evaluate(self, val_loader, wandb_run, epoch):
+        """
+        Evaluate the model on the validation set.
+        Args:
+            val_loader: DataLoader for validation data
+            wandb_run: wandb run instance for logging
+            epoch: current epoch number
+        """
+        raise NotImplementedError("evaluate must be implemented in the derived class.")
+
+    def log(self, wandb_run, logs: dict, step=None):
         """
         Optional method to log model-specific information.
         Args:
