@@ -69,14 +69,14 @@ class VAE(BaseVAE):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
-    def train_step(self, batch, device, loss_fn):
+    def train_step(self, batch, device):
         x = batch.to(device)
         x_hat, mu, logvar = self.forward(x)
         loss, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
         logs = {"loss": loss.item(), "kld": kld.item()}
         return loss, logs
 
-    def val_step(self, batch, device, loss_fn):
+    def val_step(self, batch, device):
         x = batch.to(device)
         with torch.no_grad():
             x_hat, mu, logvar = self.forward(x)
