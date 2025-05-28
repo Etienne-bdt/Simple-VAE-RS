@@ -2,10 +2,10 @@ import os
 
 import torch
 import torch.nn as nn
+import wandb
 from torch.nn import functional as F
 from tqdm import tqdm
 
-import wandb
 from loss import cond_loss
 
 from .base import BaseVAE
