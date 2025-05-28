@@ -30,7 +30,7 @@ def main(args):
 
     callbacks_list = [
         callbacks.ModelCheckpoint("ckpt", monitor="val_loss", mode="min"),
-        callbacks.EarlyStopping(patience=10, delta=0.01),
+        callbacks.EarlyStopping(patience=25, delta=0.01),
     ]
     if args.model_type == "VAE":
         model = models.VAE(latent_size, args.patch_size, callbacks=callbacks_list)
