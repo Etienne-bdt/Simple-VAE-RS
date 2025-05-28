@@ -1,9 +1,11 @@
 import abc
 from typing import List
 
+import lpips
 import torch
 import torch.nn as nn
 import wandb
+from skimage import metrics as skmetrics
 from tqdm import tqdm
 
 from callbacks import Callback
@@ -26,6 +28,8 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         self.latent_size: int = 0
         self.patch_size: int = 0
         self.callbacks: List[Callback] = []
+        self.ssim = skmetrics.structural_similarity
+        self.lpips_fn = lpips.LPIPS(net="alex")
 
     def fit(self, train_loader, val_loader, device, epochs=1000, **kwargs):
         """
@@ -36,9 +40,12 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             device: device to use for training (e.g., 'cuda' or 'cpu')
             epochs: number of epochs to train
         """
+        self.current_epoch: int = 0
+        self.lpips_fn = self.lpips_fn.to(device)
+        self.lpips_fn.eval()
         start_epoch = kwargs.get("start_epoch", 1)
         val_metrics_every = kwargs.get("val_metrics_every", float("inf"))
-        wandb_run = wandb.init(
+        self.wandb_run = wandb.init(
             project=self.__class__.__name__,
             name=f"Latent-{self.latent_size}-Patch-{self.patch_size}-SLURM-{kwargs.get('slurm_job_id', 'local')}",
             entity="ebardet-isae-supaero",
@@ -46,7 +53,9 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         )
 
         optimizer = self.optimizer
+        self.on_train_start()
         for epoch in range(start_epoch, epochs + 1):
+            self.current_epoch = epoch
             for cb in self.callbacks:
                 if cb.on_epoch_begin(
                     epoch=epoch, optimizer=optimizer, device=device, model=self
@@ -81,11 +90,10 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             # Average the loss terms
             for key in terms_dict:
                 terms_dict[key] /= len(train_loader)
-
+            self.terms_dict = terms_dict
             train_loss /= len(train_loader)
 
-            self.log(wandb_run, terms_dict, step=epoch)
-
+            self.on_train_epoch_end()
             self.eval()
             val_loss = 0.0
             val_terms_dict = {}
@@ -109,7 +117,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     val_loss += loss.item()
 
                 if epoch % val_metrics_every == 0 or [1, epochs]:
-                    self.evaluate(val_loader, wandb_run, epoch)
+                    self.evaluate(val_loader, self.wandb_run, epoch)
 
             # Average the validation loss terms
             for key in val_terms_dict:
@@ -117,7 +125,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
 
             val_loss /= len(val_loader)
             self.scheduler.step(val_loss)
-            self.log(wandb_run, val_terms_dict, step=epoch)
+            self.log(self.wandb_run, val_terms_dict, step=epoch)
             for cb in self.callbacks:
                 if cb.on_epoch_end(
                     epoch=epoch, optimizer=optimizer, device=device, model=self
@@ -131,7 +139,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                 f"Epoch {epoch}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}"
             )
 
-        wandb_run.finish()
+        self.wandb_run.finish()
 
     @abc.abstractmethod
     def forward(self, *args, **kwargs):
@@ -193,3 +201,21 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             return
         if step is not None:
             wandb_run.log(logs, step=step)
+
+    @abc.abstractmethod
+    def on_train_start(self, **kwargs):
+        """
+        Called at the start of training.
+        Args:
+            kwargs: additional arguments
+        """
+        pass
+
+    @abc.abstractmethod
+    def on_train_epoch_end(self, **kwargs):
+        """
+        Called at the end of each training epoch.
+        Args:
+            kwargs: additional arguments
+        """
+        pass
