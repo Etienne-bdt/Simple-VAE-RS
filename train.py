@@ -4,6 +4,7 @@ import time
 
 import torch
 
+import callbacks
 import models
 from dataset import init_dataloader
 from test import test
@@ -27,10 +28,16 @@ def main(args):
     results_dir = os.path.join("results", str(latent_size), slurm_job_id)
     os.makedirs(results_dir, exist_ok=True)
 
+    callbacks_list = [
+        callbacks.ModelCheckpoint("ckpt", monitor="val_loss", mode="min"),
+        callbacks.EarlyStopping(patience=10, delta=0.01),
+    ]
     if args.model_type == "VAE":
-        model = models.VAE(latent_size, args.patch_size)
+        model = models.VAE(latent_size, args.patch_size, callbacks=callbacks_list)
     elif args.model_type == "Cond_SRVAE":
-        model = models.Cond_SRVAE(latent_size, args.patch_size)
+        model = models.Cond_SRVAE(
+            latent_size, args.patch_size, callbacks=callbacks_list
+        )
 
     else:
         raise ValueError(

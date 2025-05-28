@@ -48,6 +48,13 @@ class EarlyStopping(Callback):
         self.best_epoch = 0
         self.metric_name = "val_loss"
 
+    def on_epoch_begin(self, **kwargs) -> bool:
+        """
+        Call this method at the beginning of each epoch.
+        Returns: bool: True if training should stop, False otherwise.
+        """
+        return False
+
     def on_epoch_end(self, **kwargs) -> bool:
         """
         Call this method to check if training should be stopped.
@@ -92,6 +99,9 @@ class ModelCheckpoint(Callback):
         self.save_best_only = save_best_only
         self.best_metric = float("inf") if mode == "min" else float("-inf")
         self.best_epoch = 0
+
+    def on_epoch_begin(self, **kwargs) -> bool:
+        return False
 
     def on_epoch_end(self, **kwargs) -> bool:
         """

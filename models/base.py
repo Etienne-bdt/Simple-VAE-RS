@@ -16,12 +16,14 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
     Base class for all VAEs. Defines the common interface for training and validation.
     """
 
-    def __init__(self, patch_size: int = 64):
+    def __init__(self, patch_size: int = 64, callbacks: List[Callback] | None = None):
+        if callbacks is None:
+            callbacks = []
         super().__init__()
         # Scheduler to reduce learning rate on plateau
         self.latent_size: int = 0
         self.patch_size: int = patch_size
-        self.callbacks: List[Callback] = []
+        self.callbacks: List[Callback] = callbacks
         self.ssim = skmetrics.structural_similarity
         self.lpips_fn = lpips.LPIPS(net="alex")
 
@@ -37,7 +39,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         self.val_loader = val_loader
         self.optimizer = optimizer
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=30
+            self.optimizer, mode="min", factor=0.5, patience=10
         )
         self.current_epoch: int = 0
         self.lpips_fn = self.lpips_fn.to(device)
@@ -66,6 +68,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
 
         optimizer = self.optimizer
         self.on_train_start()
+
         for epoch in range(start_epoch, epochs + 1):
             self.current_epoch = epoch
             for cb in self.callbacks:
@@ -141,7 +144,11 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             self.log(self.wandb_run, val_terms_dict, step=epoch)
             for cb in self.callbacks:
                 if cb.on_epoch_end(
-                    epoch=epoch, optimizer=optimizer, device=device, model=self
+                    epoch=epoch,
+                    optimizer=optimizer,
+                    device=device,
+                    model=self,
+                    logs=val_terms_dict,
                 ):
                     print(
                         f"Stopping training after epoch {epoch} due to {cb.__class__.__name__} condition."

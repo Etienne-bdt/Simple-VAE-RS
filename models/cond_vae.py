@@ -12,8 +12,10 @@ from .base import BaseVAE
 
 
 class Cond_SRVAE(BaseVAE):
-    def __init__(self, latent_size, patch_size=64):
-        super(Cond_SRVAE, self).__init__(patch_size)
+    def __init__(self, latent_size, patch_size=64, callbacks=None):
+        if callbacks is None:
+            callbacks = []
+        super(Cond_SRVAE, self).__init__(patch_size, callbacks)
         self.latent_size = latent_size
         self.latent_size_y = latent_size // 4
         self.patch_size = patch_size

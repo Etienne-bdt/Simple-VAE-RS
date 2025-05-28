@@ -8,8 +8,10 @@ from .base import BaseVAE
 
 
 class VAE(BaseVAE):
-    def __init__(self, latent_size, patch_size=64):
-        super(VAE, self).__init__(patch_size)
+    def __init__(self, latent_size, patch_size=64, callbacks=None):
+        if callbacks is None:
+            callbacks = []
+        super(VAE, self).__init__(patch_size, callbacks)
         self.latent_size = latent_size
         self.patch_size = patch_size
 
