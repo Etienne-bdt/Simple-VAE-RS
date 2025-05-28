@@ -4,10 +4,10 @@ from typing import List
 import lpips
 import torch
 import torch.nn as nn
-import wandb
 from skimage import metrics as skmetrics
 from tqdm import tqdm
 
+import wandb
 from callbacks import Callback
 
 
@@ -34,6 +34,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             device: device to use for training (e.g., 'cuda' or 'cpu')
             epochs: number of epochs to train
         """
+        self.val_loader = val_loader
         self.optimizer = optimizer
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.5, patience=30

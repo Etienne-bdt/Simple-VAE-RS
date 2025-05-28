@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-import wandb
 
+import wandb
 from loss import base_loss
 
 from .base import BaseVAE
@@ -11,6 +11,7 @@ class VAE(BaseVAE):
     def __init__(self, latent_size, patch_size=64):
         super(VAE, self).__init__(patch_size)
         self.latent_size = latent_size
+        self.patch_size = patch_size
 
         self.gamma = torch.tensor(1.0, requires_grad=True)
 
@@ -58,7 +59,7 @@ class VAE(BaseVAE):
 
     def decode(self, z):
         z = self.fc_decode(z)
-        z = z.view(z.size(0), 128, 8 * 4, 8 * 4)
+        z = z.view(z.size(0), 128, self.patch_size // 16, self.patch_size // 16)
         x = self.decoder(z)
         return x
 
@@ -70,7 +71,7 @@ class VAE(BaseVAE):
 
     def train_step(self, batch, device, loss_fn):
         x = batch.to(device)
-        x_hat, mu, logvar = self(x)
+        x_hat, mu, logvar = self.forward(x)
         loss, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
         logs = {"loss": loss.item(), "kld": kld.item()}
         return loss, logs
@@ -78,7 +79,7 @@ class VAE(BaseVAE):
     def val_step(self, batch, device, loss_fn):
         x = batch.to(device)
         with torch.no_grad():
-            x_hat, mu, logvar = self(x)
+            x_hat, mu, logvar = self.forward(x)
             loss, kld = base_loss(
                 x_hat,
                 x,
@@ -102,14 +103,14 @@ class VAE(BaseVAE):
         for xb in val_loader:
             x = xb.to(device)
             with torch.no_grad():
-                x_hat, _, _ = self(x)
+                x_hat, _, _ = self.forward(x)
 
             b = x.size(0)
             total_pixels += b
 
             # per-sample metrics
             for orig, recon in zip(x, x_hat):
-                ssim, *_ = self.ssim(
+                ssim = self.ssim(
                     orig.cpu().numpy(),
                     recon.cpu().numpy(),
                     win_size=11,

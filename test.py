@@ -4,10 +4,10 @@ import time
 import torch
 from matplotlib import pyplot as plt
 
-from model import Cond_SRVAE
+import models
 
 
-def test(device, model: Cond_SRVAE, val_loader):
+def test(device, model: models.Cond_SRVAE, val_loader):
     """
     Test the model on the validation set and compute error maps for a given image.
     Args:

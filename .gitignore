@@ -16,3 +16,4 @@ floods/
 
 *.png
 results/*/*/wandb/
+wandb/*

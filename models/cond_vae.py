@@ -2,10 +2,10 @@ import os
 
 import torch
 import torch.nn as nn
-import wandb
 from torch.nn import functional as F
 from tqdm import tqdm
 
+import wandb
 from loss import cond_loss
 
 from .base import BaseVAE
@@ -239,7 +239,9 @@ class Cond_SRVAE(BaseVAE):
     def train_step(self, batch, device):
         y, x = batch
         y, x = y.to(device), x.to(device)
-        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = self(x, y)
+        x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = (
+            self.forward(x, y)
+        )
         mse_x, kld_u, mse_y, kld_z = cond_loss(
             x_hat,
             x,
@@ -314,14 +316,14 @@ class Cond_SRVAE(BaseVAE):
         for batch in val_loader:
             y, x = [t.to(device) for t in batch]
             with torch.no_grad():
-                x_hat, y_hat, *_ = self(x, y)
+                x_hat, y_hat, *_ = self.forward(x, y)
                 x_sr = self.conditional_generation(y)
 
             b = y.size(0)
             count += b
 
             for oy, ry, ox, rx, gen in zip(y, y_hat, x, x_hat, x_sr):
-                ssim_y, *_ = self.ssim(
+                ssim_y = self.ssim(
                     oy.cpu().numpy(),
                     ry.cpu().numpy(),
                     win_size=11,
@@ -332,7 +334,7 @@ class Cond_SRVAE(BaseVAE):
                 total["lpips_y"] += self.lpips_fn(
                     oy[[2, 1, 0]].unsqueeze(0), ry[[2, 1, 0]].unsqueeze(0)
                 ).item()
-                ssim_x, *_ = self.ssim(
+                ssim_x = self.ssim(
                     ox.cpu().numpy(),
                     rx.cpu().numpy(),
                     win_size=11,
@@ -343,7 +345,7 @@ class Cond_SRVAE(BaseVAE):
                 total["lpips_x"] += self.lpips_fn(
                     ox[[2, 1, 0]].unsqueeze(0), rx[[2, 1, 0]].unsqueeze(0)
                 ).item()
-                ssim_sr, *_ = self.ssim(
+                ssim_sr = self.ssim(
                     ox.cpu().numpy(),
                     gen.cpu().numpy(),
                     win_size=11,
@@ -402,7 +404,7 @@ class Cond_SRVAE(BaseVAE):
         )
 
     def on_train_start(self, **kwargs):
-        val_loader = kwargs.get("val_loader")
+        val_loader = self.val_loader
         if val_loader is None:
             raise ValueError(
                 "Validation loader must be provided for baseline evaluation."
@@ -426,7 +428,7 @@ class Cond_SRVAE(BaseVAE):
 
                 # Compute SSIM and LPIPS scores
                 for bcb, hr in zip(hr_interp, x_val):
-                    ssim_val, *_ = self.ssim(
+                    ssim_val = self.ssim(
                         hr, bcb, win_size=11, data_range=1.0, channel_axis=0
                     )
                     lpips = self.lpips_fn(
