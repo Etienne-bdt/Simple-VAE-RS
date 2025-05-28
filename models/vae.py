@@ -22,9 +22,9 @@ class VAE(BaseVAE):
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
             nn.ReLU(),
         )
-        self.fc_mu = nn.Linear(128 * 8 * 8 * 16, self.latent_size)
-        self.fc_logvar = nn.Linear(128 * 8 * 8 * 16, self.latent_size)
-        self.fc_decode = nn.Linear(self.latent_size, 128 * 8 * 8 * 16)
+        self.fc_mu = nn.Linear(patch_size**2 // 2, self.latent_size)
+        self.fc_logvar = nn.Linear(patch_size**2 // 2, self.latent_size)
+        self.fc_decode = nn.Linear(self.latent_size, patch_size**2 // 2)
 
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(
