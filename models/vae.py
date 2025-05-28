@@ -71,7 +71,6 @@ class VAE(BaseVAE):
 
     def train_step(self, batch, device):
         x, _ = batch
-        print(self.gamma)
         x = x.to(device)
         x_hat, mu, logvar = self.forward(x)
         loss, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
