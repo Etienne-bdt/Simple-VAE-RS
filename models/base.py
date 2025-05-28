@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from skimage import metrics as skmetrics
 from tqdm import tqdm
-
 import wandb
+
 from callbacks import Callback
 
 
