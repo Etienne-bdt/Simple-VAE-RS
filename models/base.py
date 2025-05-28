@@ -16,22 +16,16 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
     Base class for all VAEs. Defines the common interface for training and validation.
     """
 
-    def __init__(self):
+    def __init__(self, patch_size: int = 64):
         super().__init__()
-        self.optimizer: torch.optim.Optimizer = torch.optim.Adam(
-            self.parameters(), lr=1e-3
-        )
         # Scheduler to reduce learning rate on plateau
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=30
-        )
         self.latent_size: int = 0
-        self.patch_size: int = 0
+        self.patch_size: int = patch_size
         self.callbacks: List[Callback] = []
         self.ssim = skmetrics.structural_similarity
         self.lpips_fn = lpips.LPIPS(net="alex")
 
-    def fit(self, train_loader, val_loader, device, epochs=1000, **kwargs):
+    def fit(self, train_loader, val_loader, device, optimizer, epochs=1000, **kwargs):
         """
         Fit the model to the training data.
         Args:
@@ -40,6 +34,10 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             device: device to use for training (e.g., 'cuda' or 'cpu')
             epochs: number of epochs to train
         """
+        self.optimizer = optimizer
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.5, patience=30
+        )
         self.current_epoch: int = 0
         self.lpips_fn = self.lpips_fn.to(device)
         self.lpips_fn.eval()
@@ -49,7 +47,15 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             project=self.__class__.__name__,
             name=f"Latent-{self.latent_size}-Patch-{self.patch_size}-SLURM-{kwargs.get('slurm_job_id', 'local')}",
             entity="ebardet-isae-supaero",
-            config=kwargs.get("config", {}),
+            config=kwargs.get(
+                "config",
+                {
+                    "latent_size": self.latent_size,
+                    "patch_size": self.patch_size,
+                    "epochs": epochs,
+                    "optimizer": str(optimizer),
+                },
+            ),
         )
 
         optimizer = self.optimizer
@@ -124,7 +130,8 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                 val_terms_dict[key] /= len(val_loader)
 
             val_loss /= len(val_loader)
-            self.scheduler.step(val_loss)
+            if self.scheduler:
+                self.scheduler.step(val_loss)
             self.log(self.wandb_run, val_terms_dict, step=epoch)
             for cb in self.callbacks:
                 if cb.on_epoch_end(

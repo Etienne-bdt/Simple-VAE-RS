@@ -8,8 +8,8 @@ from .base import BaseVAE
 
 
 class VAE(BaseVAE):
-    def __init__(self, latent_size):
-        super(VAE, self).__init__()
+    def __init__(self, latent_size, patch_size=64):
+        super(VAE, self).__init__(patch_size)
         self.latent_size = latent_size
 
         self.gamma = torch.tensor(1.0, requires_grad=True)
@@ -158,3 +158,6 @@ class VAE(BaseVAE):
             },
             step=self.current_epoch,
         )
+
+    def on_train_start(self, **kwargs):
+        return super().on_train_start(**kwargs)

@@ -3,181 +3,10 @@ import os
 import time
 
 import torch
-import wandb
-from tqdm import tqdm
 
+import models
 from dataset import init_dataloader
-from loss import cond_loss
 from test import test
-from utils import EarlyStopper, SrEvaluator
-
-
-def train(
-    device,
-    model,
-    train_loader,
-    val_loader,
-    gamma,
-    gamma2,
-    optimizer,
-    epochs,
-    wandb_run,
-    start_epoch=1,
-    pretrain=False,
-    bands=None,
-    **kwargs,
-):
-    """
-    Training script for the Conditional SRVAE model.
-    Args:
-        device: The device to use for training (CPU or GPU).
-        model: The Conditional SRVAE model.
-        train_loader: DataLoader for the training set.
-        val_loader: DataLoader for the validation set.
-        gamma: The gamma parameter for the loss function.
-        gamma2: The gamma2 parameter for the loss function.
-        optimizer: The optimizer for training.
-        epochs: Number of epochs to (pre)train the model.
-        pretrain: If True, pretrain the model on low resolution data.
-        bands: List of bands to use for visualization. (Default is the usual Visual RGB bands)
-    """
-    bands = bands or [2, 1, 0]  # Default to RGB bands if not provided
-    slurm_job_id = kwargs["slurm_job_id"]
-    best_loss = float("inf")  # Initialize best loss to infinity
-    early_stopper = EarlyStopper(patience=30, delta=0.001)  # Initialize early stopper
-    print("Script will compute metrics every", kwargs["val_metrics_every"], "epochs")
-    print("Sanity checking the model...")
-    for _batch in val_loader:
-        pass
-    y_val, x_val = _batch
-    y_val, x_val = y_val.to(device), x_val.to(device)
-    _, c, h, w = y_val.shape
-    x_hat, y_hat, _, _, _, _, _, _ = model(x_val, y_val)
-    assert x_hat.shape == x_val.shape, "x_hat shape mismatch"
-    assert y_hat.shape == y_val.shape, "y_hat shape mismatch"
-    print("Model sanity check passed.")
-    print("Computing baseline...")
-    evaluator = SrEvaluator(val_loader, start_epoch, wandb_run)  # Initialize evaluator
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=15
-    )  # Initialize learning rate scheduler
-    print("Baseline computed.")
-
-    evaluator.log_images(y_val[:4, :, :, :], "Reconstruction/LR_Original", 1)
-    evaluator.log_images(x_val[:4, :, :, :], "Reconstruction/HR_Original", 1)
-
-    for epoch in range(start_epoch, epochs + 1):
-        model.train()
-        train_loss = 0
-        train_logs = []
-        for _, batch in tqdm(
-            enumerate(train_loader),
-            total=len(train_loader),
-            desc=f"Training, Epoch {epoch}/{epochs}",
-            unit="batch",
-        ):
-            optimizer.zero_grad()
-            # Utilisation du train_step générique
-            loss, logs = model.train_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
-            loss.backward()
-            train_loss += loss.item()
-            train_logs.append(logs)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-
-        # Append train losses to lists after each epoch
-
-        print(
-            f"====> Epoch: {epoch} Average loss: {(train_loss) / len(train_loader.dataset):.4f}"
-        )
-
-        val_loss = 0
-        val_logs = []
-        model.eval()
-        with torch.no_grad():
-            for _, batch in enumerate(val_loader):
-                # Utilisation du val_step générique
-                v_loss, vlogs = model.val_step(batch, device, cond_loss, gamma=gamma, gamma2=gamma2, pretrain=pretrain)
-                val_loss += v_loss.item()
-                val_logs.append(vlogs)
-        scheduler.step(val_loss / len(val_loader))  # Step the scheduler
-        print(f"====> Validation loss: {(val_loss) / len(val_loader.dataset):.4f}")
-
-        if early_stopper(val_loss / len(val_loader.dataset)):
-            print(
-                f"====> Early stopping at epoch {epoch} with loss: {val_loss / len(val_loader.dataset):.4f}"
-            )
-            break
-        if val_loss / len(val_loader.dataset) < best_loss:
-            best_loss = val_loss / len(val_loader.dataset)
-            print(
-                f"====> New best model found at epoch {epoch} with loss: {best_loss:.4f}"
-            )
-            # Save training data
-            save_dict = {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "gamma": gamma,
-                "gamma2": gamma2,
-            }
-            torch.save(
-                save_dict,
-                f"{'pre_' if pretrain else ''}best_model_{slurm_job_id}.pth",
-            )
-
-        # Log reconstruction and Conditional generation
-
-        evaluator.log_images(
-            y_hat.view(-1, c, h, w)[:4, :, :, :], "Reconstruction/LR", epoch
-        )
-        evaluator.log_images(
-            x_hat.view(-1, c, h * 2, w * 2)[:4, :, :, :], "Reconstruction/HR", epoch
-        )
-        if not pretrain:
-            if epoch % kwargs["val_metrics_every"] != 0 and epoch not in [1, epochs]:
-                conditional_gen = model.conditional_generation(y)
-            evaluator.log_images(
-                conditional_gen.view(-1, c, h * 2, w * 2)[:4, :, :, :],
-                "Conditional Generation/HR",
-                epoch,
-            )
-        # Log to WandB
-        wandb_run.log(
-            {
-                "Loss/KLD_u/Train": tot_kld_u / len(train_loader.dataset),
-                "Loss/KLD_u/Validation": val_tot_kld_u / len(val_loader.dataset),
-                "Loss/KLD_z/Train": tot_kld_z / len(train_loader.dataset),
-                "Loss/KLD_z/Validation": val_tot_kld_z / len(val_loader.dataset),
-                "Loss/MSE_y/Train": tot_mse_y / len(train_loader.dataset),
-                "Loss/MSE_y/Validation": val_tot_mse_y / len(val_loader.dataset),
-                "Loss/MSE_x/Train": tot_mse_x / len(train_loader.dataset),
-                "Loss/MSE_x/Validation": val_tot_mse_x / len(val_loader.dataset),
-                "Loss/Total/Train": train_loss / len(train_loader.dataset),
-                "Loss/Total/Validation": val_loss / len(val_loader.dataset),
-                "Gamma/Gamma_y": gamma2.item(),
-                "Gamma/Gamma_x": gamma.item(),
-                "Learning Rate": optimizer.param_groups[0]["lr"],
-            },
-            step=epoch - 1,
-        )
-        if epoch % kwargs["val_metrics_every"] == 0 or epoch in [1, epochs]:
-            wandb_run.log(
-                {
-                    "Metrics/SSIM/Baseline": evaluator.ssim_base,
-                    "Metrics/SSIM/Recon_LR": val_recon_ssim_lr,
-                    "Metrics/SSIM/Recon_HR": val_recon_ssim_hr,
-                    "Metrics/SSIM/SR": val_tot_ssim,
-                    "Metrics/LPIPS/Baseline": evaluator.lpips_base,
-                    "Metrics/LPIPS/Recon_LR": val_recon_lpips_lr,
-                    "Metrics/LPIPS/Recon_HR": val_recon_lpips_hr,
-                    "Metrics/LPIPS/SR": val_tot_lpips,
-                },
-                step=epoch - 1,
-            )
-        if torch.isnan(loss):
-            raise ValueError("Loss is NaN, stopping training.")
-    return
 
 
 def main(args):
@@ -198,30 +27,19 @@ def main(args):
     results_dir = os.path.join("results", str(latent_size), slurm_job_id)
     os.makedirs(results_dir, exist_ok=True)
     # Instanciation dynamique du modèle
+
     if args.model_type == "VAE":
-        from model import VAE
+        model = models.VAE(latent_size, args.patch_size)
+    elif args.model_type == "Cond_SRVAE":
+        model = models.Cond_SRVAE(latent_size, args.patch_size)
 
-        model = VAE(latent_size)
     else:
-        from model import Cond_SRVAE
+        raise ValueError(
+            f"Unknown model type: {args.model_type}. Choose 'Cond_SRVAE' or 'VAE'."
+        )
 
-        model = Cond_SRVAE(latent_size, args.patch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-
-    run = wandb.init(
-        project="Cond_SRVAE",
-        entity="ebardet-isae-supaero",
-        name=f"Cond_SRVAE_latent_{latent_size}_patch_{args.patch_size}_{slurm_job_id}",
-        config={
-            "latent_size": latent_size,
-            "patch_size": args.patch_size,
-            "epochs": args.epochs,
-            "batch_size": args.batch_size * (256 // args.patch_size) ** 2,
-            "slurm_job_id": slurm_job_id,
-        },
-        dir=results_dir,
-    )
 
     if args.model_ckpt:
         print("Loading model from checkpoint...")
@@ -230,20 +48,13 @@ def main(args):
         model.load_state_dict(save_dict["model_state_dict"])
         print("Model loaded successfully.")
         print("Loading optimizer state...")
-        gamma = save_dict["gamma"]
-        gamma2 = save_dict["gamma2"]
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-        optimizer.add_param_group({"params": [gamma, gamma2]})
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         start_epoch = 1
-        gamma = torch.tensor([1.0]).to(device)
-        gamma2 = torch.tensor([1.0]).to(device)
-        gamma.requires_grad = True
-        gamma2.requires_grad = True
-        optimizer.add_param_group({"params": [gamma, gamma2]})
+
     # Lower learning rate for the conditional part
     for param_group in optimizer.param_groups:
         param_group["lr"] = 1e-3
@@ -253,16 +64,12 @@ def main(args):
         model.fit(
             train_loader=train_loader,
             val_loader=val_loader,
-            optimizer=optimizer,
             epochs=args.epochs,
             device=device,
-            gamma=gamma,
-            gamma2=gamma2,
+            optimizer=optimizer,
             start_epoch=start_epoch,
-            pretrain=False,
             val_metrics_every=args.val_metrics_every,
             slurm_job_id=slurm_job_id,
-            wandb_run=run,
         )
 
     test(device, model, val_loader)
