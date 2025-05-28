@@ -122,7 +122,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
 
                     val_loss += loss.item()
 
-                if epoch % val_metrics_every == 0 or [1, epochs]:
+                if epoch % val_metrics_every == 0 or epoch in [1, epochs]:
                     self.evaluate(val_loader, self.wandb_run, epoch)
 
             # Average the validation loss terms

@@ -26,7 +26,6 @@ def main(args):
     )
     results_dir = os.path.join("results", str(latent_size), slurm_job_id)
     os.makedirs(results_dir, exist_ok=True)
-    # Instanciation dynamique du modèle
 
     if args.model_type == "VAE":
         model = models.VAE(latent_size, args.patch_size)
@@ -60,7 +59,6 @@ def main(args):
         param_group["lr"] = 1e-3
 
     if not (args.test and args.model_ckpt):
-        # Utilisation de la méthode fit du modèle
         model.fit(
             train_loader=train_loader,
             val_loader=val_loader,
