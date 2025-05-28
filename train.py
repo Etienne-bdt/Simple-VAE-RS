@@ -133,7 +133,7 @@ def parse_args():
         type=str,
         default="Cond_SRVAE",
         choices=["Cond_SRVAE", "VAE"],
-        help="Type de modèle à utiliser : 'Cond_SRVAE' ou 'VAE'",
+        help="Model to use : 'Cond_SRVAE' ou 'VAE'",
     )
 
     return parser.parse_args()
