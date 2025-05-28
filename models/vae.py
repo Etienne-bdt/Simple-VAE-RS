@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-
 import wandb
+
 from loss import base_loss
 
 from .base import BaseVAE
