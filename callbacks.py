@@ -1,7 +1,13 @@
 import abc
+import os
 
+import lpips
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import wandb
+from skimage.metrics import structural_similarity as ssim
+from tqdm import tqdm
 
 
 class Callback(abc.ABC):
@@ -117,3 +123,139 @@ class ModelCheckpoint(Callback):
                 f"{self.save_path}_epoch_{kwargs.get('epoch', 0)}.pth",
             )
         return False
+
+
+class SrEvaluator:
+    """
+    Class to evaluate the performance of the super-resolution (SR) model.
+    Args:
+        y_val (torch.Tensor): Low-resolution images.
+        x_val (torch.Tensor): High-resolution images.
+        wandb_run: WandB run.
+        start_epoch (int): Current epoch number.
+    """
+
+    def __init__(self, val_loader, start_epoch, wandb_run):
+        """
+        Initialize the SR_Evaluator class.
+        """
+        self.val_loader = val_loader
+        self.len_val = len(val_loader)
+        self.wandb_run = wandb_run
+        self.start_epoch = start_epoch
+        self.lpips_loss = lpips.LPIPS(net="alex").cuda()
+        self.ssim = ssim
+        self.compute_baseline()
+
+    def compute_baseline(self):
+        """
+        Compute and log the baseline images for the SR task.
+        """
+        for _batch in self.val_loader:
+            pass
+        y_val, x_val = _batch
+        hr_interp = F.interpolate(y_val[:4, :, :, :], scale_factor=2, mode="bicubic")
+        self.wandb_run.log(
+            {
+                "Conditional Generation/HR Interpolated": [
+                    wandb.Image(
+                        hr_interp[i].permute(1, 2, 0).cpu().numpy(),
+                        caption=f"HR Interpolated {i}",
+                    )
+                    for i in range(hr_interp.shape[0])
+                ],
+                "Conditional Generation/HR_Original": [
+                    wandb.Image(
+                        x_val[i].permute(1, 2, 0).cpu().numpy(),
+                        caption=f"HR Original {i}",
+                    )
+                    for i in range(min(y_val.shape[0], 4))
+                ],
+                "Conditional Generation/LR_Original": [
+                    wandb.Image(
+                        y_val[i].permute(1, 2, 0).cpu().numpy(),
+                        caption=f"LR Original {i}",
+                    )
+                    for i in range(min(y_val.shape[0], 4))
+                ],
+            },
+            step=self.start_epoch - 1,
+        )
+        ssim_cumu, lpips_cumu = 0, 0
+        if not os.path.exists("baseline_ckpt.pth"):
+            for _, batch in tqdm(enumerate(self.val_loader)):
+                y_val, x_val = batch
+                y_val = y_val.cuda()
+                x_val = x_val.cuda()
+
+                hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
+
+                # Compute SSIM and LPIPS scores
+                ssim, lpips = self.compute_metrics(hr_interp, x_val)
+                ssim_cumu += ssim
+                lpips_cumu += lpips
+            self.ssim_base = ssim_cumu
+            self.lpips_base = lpips_cumu
+            torch.save(
+                {
+                    "ssim_base": self.ssim_base,
+                    "lpips_base": self.lpips_base,
+                },
+                "baseline_ckpt.pth",
+            )
+        else:
+            checkpoint = torch.load("baseline_ckpt.pth")
+            self.ssim_base = checkpoint["ssim_base"]
+            self.lpips_base = checkpoint["lpips_base"]
+            print(f"SSIM Baseline: {self.ssim_base}, LPIPS Baseline: {self.lpips_base}")
+
+    def compute_metrics(self, pred, gt):
+        """
+        Compute and log the metrics for the SR task.
+        Args:
+            pred (torch.Tensor): Predicted images (A batch).
+            gt (torch.Tensor): Ground truth images (A batch).
+        """
+        ssim_score, lpips_score = 0, 0
+        b = pred.shape[0]
+        for p, g in zip(pred, gt):
+            ssim_s = self.ssim(
+                p.cpu().numpy(),
+                g.cpu().numpy(),
+                win_size=11,
+                data_range=1,
+                channel_axis=0,
+                gradient=False,
+                full=False,
+            )
+            lpips_s = self.lpips_loss(
+                p[[2, 1, 0], :, :].cuda(),
+                g[[2, 1, 0], :, :].cuda(),
+            )
+            lpips_score += lpips_s
+            ssim_score += ssim_s
+        ssim_score = torch.tensor(ssim_score) / (b * self.len_val)
+
+        lpips_score = lpips_score / (b * self.len_val)
+        return ssim_score, lpips_score
+
+    def log_images(self, img, category, epoch):
+        """
+        Log the images to WandB.
+        Args:
+            img (torch.Tensor): Image tensor to log.
+            category (str): Category of the image.
+            epoch (int): Current epoch number.
+        """
+        self.wandb_run.log(
+            {
+                category: [
+                    wandb.Image(
+                        img[i].permute(1, 2, 0).cpu().detach().numpy(),
+                        caption=f"{category} {i}",
+                    )
+                    for i in range(img.shape[0])
+                ]
+            },
+            step=epoch - 1,
+        )

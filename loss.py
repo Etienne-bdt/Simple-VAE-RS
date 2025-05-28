@@ -14,7 +14,7 @@ def base_loss(recon_x, x, mu, logvar, gamma):
 
 
 def cond_loss(
-    recon_x, x, recon_y, y, mu1, logvar1, mu2, logvar2, mu3, logvar3, gamma, gamma2
+    recon_x, x, recon_y, y, mu1, logvar1, mu2, logvar2, mu3, logvar3, gammax, gammay
 ):
     """
     Loss function for the Conditional Super-Resolution VAE. This function minimizes the **NEGATIVE** ELBO:
@@ -32,8 +32,8 @@ def cond_loss(
         logvar2 (torch.Tensor): Log variance of the latent variable for the HR image conditioned on the HR image.
         mu3 (torch.Tensor): Mean of the latent variable for the HR image conditioned on the LR image.
         logvar3 (torch.Tensor): Log variance of the latent variable for the HR image conditioned on the LR image.
-        gamma (torch.Tensor): Variance of the prior for the HR image.
-        gamma2 (torch.Tensor): Variance of the prior for the LR image.
+        gammax (torch.Tensor): Variance of the prior for the HR image.
+        gammay (torch.Tensor): Variance of the prior for the LR image.
 
     Returns:
         tuple: A tuple containing:
@@ -52,11 +52,11 @@ def cond_loss(
     n_y = y_shape[0] * y_shape[1] * y_shape[2] * y_shape[3]
     n_x = x_shape[0] * x_shape[1] * x_shape[2] * x_shape[3]
     mse_y = n_y * (
-        F.mse_loss(recon_y, y, reduction="mean") / (2 * gamma2.pow(2)) + (gamma2.log())
+        F.mse_loss(recon_y, y, reduction="mean") / (2 * gammay.pow(2)) + (gammay.log())
     )
     kld_u = 0.5 * torch.sum(mu1.pow(2) + logvar1.exp() - 1 - logvar1, dim=1).mean()
     mse_x = n_x * (
-        F.mse_loss(recon_x, x, reduction="mean") / (2 * gamma.pow(2)) + (gamma.log())
+        F.mse_loss(recon_x, x, reduction="mean") / (2 * gammax.pow(2)) + (gammax.log())
     )
     kld_z = (
         0.5
