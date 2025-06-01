@@ -43,10 +43,8 @@ class VAE(BaseVAE):
         return mu + eps * std
 
     def decode(self, z):
-        z = self.fc_decode(z)
-        z = z.view(z.size(0), 128, self.patch_size // 16, self.patch_size // 16)
-        x = self.decoder(z)
-        return x
+        return self.decoder(z)
+
 
     def forward(self, x):
         # Forward pass through the VAE
