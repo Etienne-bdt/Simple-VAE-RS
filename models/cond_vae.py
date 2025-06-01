@@ -45,7 +45,7 @@ class Cond_SRVAE(BaseVAE):
         )
 
         self.decoder_x = upsample_sequence(
-            in_channels=128,
+            in_channels=256,
             in_flattened_size=(self.latent_size * 2),
             out_shape=(4, patch_size, patch_size),
             num_steps=10
