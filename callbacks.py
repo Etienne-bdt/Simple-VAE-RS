@@ -1,4 +1,5 @@
 import abc
+import os
 
 import torch
 import torch.nn as nn
@@ -81,6 +82,7 @@ class ModelCheckpoint(Callback):
 
     def __init__(
         self,
+        slurm_job_id: str,
         save_path: str,
         monitor: str = "val_loss",
         mode: str = "min",
@@ -93,6 +95,7 @@ class ModelCheckpoint(Callback):
             mode (str): One of {'min', 'max'}. In 'min' mode, the model is saved when the monitored metric decreases.
             save_best_only (bool): If True, only saves the model when the monitored metric improves.
         """
+        self.slurm_job_id = slurm_job_id
         self.save_path = save_path
         self.monitor = monitor
         self.mode = mode
@@ -119,11 +122,14 @@ class ModelCheckpoint(Callback):
                 self.best_metric = current_metric
                 self.best_epoch = kwargs.get("epoch", 0)
                 # Save the model here
-                torch.save(model.state_dict(), self.save_path)
+                torch.save(
+                    model.state_dict(),
+                    os.path.join(self.save_path, f"{self.slurm_job_id}.pth"),
+                )
         else:
             # Save the model every epoch
             torch.save(
                 model.state_dict(),
-                f"{self.save_path}_epoch_{kwargs.get('epoch', 0)}.pth",
+                os.path.join(self.save_path, f"{self.slurm_job_id}_epoch_{kwargs.get('epoch', 0)}.pth"),
             )
         return False
