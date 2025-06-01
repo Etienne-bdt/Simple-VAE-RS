@@ -121,11 +121,14 @@ class ModelCheckpoint(Callback):
                 self.best_metric = current_metric
                 self.best_epoch = kwargs.get("epoch", 0)
                 # Save the model here
-                torch.save(model.state_dict(), f"{self.slurm_job_id}.pth")
+                torch.save(
+                    model.state_dict(),
+                    os.path.join(self.save_path, f"{self.slurm_job_id}.pth"),
+                )
         else:
             # Save the model every epoch
             torch.save(
                 model.state_dict(),
-                f"{self.save_path}_epoch_{kwargs.get('epoch', 0)}.pth",
+                os.path.join(self.save_path, f"{self.slurm_job_id}_epoch_{kwargs.get('epoch', 0)}.pth"),
             )
         return False
