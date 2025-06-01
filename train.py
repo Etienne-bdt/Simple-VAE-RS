@@ -29,7 +29,7 @@ def main(args):
     os.makedirs(results_dir, exist_ok=True)
 
     callbacks_list = [
-        callbacks.ModelCheckpoint("ckpt", monitor="val_loss", mode="min"),
+        callbacks.ModelCheckpoint(slurm_job_id,"ckpt", monitor="val_loss", mode="min"),
         callbacks.EarlyStopping(patience=25, delta=0.01),
     ]
     if args.model_type == "VAE":
