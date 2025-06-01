@@ -27,13 +27,13 @@ class Cond_SRVAE(BaseVAE):
             in_shape=(4, int(patch_size//2), int(patch_size//2)),
             out_flattened_size=self.latent_size_y * 2,
             out_channels=256,
-            num_steps=5
+            num_steps=10
         )
         
         self.decoder_y = upsample_sequence(
             in_flattened_size=(self.latent_size_y),
             out_shape=(4, patch_size/2, patch_size/2),
-            num_steps=5,
+            num_steps=10,
             in_channels=128
         )
         
@@ -41,61 +41,42 @@ class Cond_SRVAE(BaseVAE):
             in_shape=(4, patch_size, patch_size),
             out_flattened_size=self.latent_size * 2,
             out_channels=256,
-            num_steps=5
+            num_steps=10
         )
 
         self.decoder_x = upsample_sequence(
             in_channels=128,
-            in_flattened_size=(self.latent_size),
+            in_flattened_size=(self.latent_size * 2),
             out_shape=(4, patch_size, patch_size),
-            num_steps=5
+            num_steps=10
         )
         
-        self.fc_decode_x = nn.Linear(self.latent_size * 2, 2 * patch_size**2)
-        self.decoder_2 = nn.Sequential(
-            nn.ConvTranspose2d(
-                128, 64, kernel_size=4, stride=2, padding=1
-            ),  # 128 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                64, 32, kernel_size=4, stride=2, padding=1
-            ),  # 64 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                32, 32, kernel_size=3, stride=1, padding=1
-            ),  # 32 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
-            nn.Sigmoid(),
-        )
-        self.y_to_z = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels 
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(patch_size**2 // 2, self.latent_size),
-        )
 
         self.y_to_z = downsample_sequence(
             in_shape=(4, patch_size // 2, patch_size // 2),
             out_flattened_size=self.latent_size,
             out_channels=128,
-            num_steps=5
+            num_steps=10
         )
-        self.u_to_z = nn.Linear(self.latent_size_y, self.latent_size)
-        self.mu_u_y_to_z = nn.Linear(self.latent_size * 2, self.latent_size)
+        # Replace Linear layers with Conv-based alternatives
+        # u_to_z: expects input of shape (batch, latent_size_y)
+        # We'll reshape to (batch, channels, 1, 1) and use a 1x1 Conv
+        self.u_to_z = nn.Sequential(
+            nn.Unflatten(1, (self.latent_size_y, 1, 1)),
+            nn.Conv2d(self.latent_size_y, self.latent_size, kernel_size=1),
+            nn.Flatten(1)
+        )
+        # mu_u_y_to_z and logvar_u_y_to_z: input is (batch, latent_size*2)
+        # We'll reshape to (batch, latent_size*2, 1, 1) and use 1x1 Conv
+        self.mu_u_y_to_z = nn.Sequential(
+            nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
+            nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
+            nn.Flatten(1)
+        )
         self.logvar_u_y_to_z = nn.Sequential(
-            nn.Linear(self.latent_size * 2, self.latent_size),
+            nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
+            nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
+            nn.Flatten(1),
             nn.Hardtanh(-7, 7),
         )
 
@@ -136,9 +117,7 @@ class Cond_SRVAE(BaseVAE):
     def decode_x(self, z, y):
         y_enc = self.y_to_z(y)
         stack = torch.cat((y_enc, z), dim=1)
-        z = self.fc_decode_x(stack)
-        z = z.view(y.size(0), 128, self.patch_size // 8, self.patch_size // 8)
-        return self.decoder_2(z)
+        return self.decode_x(stack)
 
     def forward(self, x, y):
         mu_u, logvar_u = self.encode_y(y)
