@@ -117,7 +117,7 @@ class Cond_SRVAE(BaseVAE):
     def decode_x(self, z, y):
         y_enc = self.y_to_z(y)
         stack = torch.cat((y_enc, z), dim=1)
-        return self.decode_x(stack)
+        return self.decoder_x(stack)
 
     def forward(self, x, y):
         mu_u, logvar_u = self.encode_y(y)
