@@ -1,10 +1,10 @@
 import torch
-import torch.nn as nn
 import wandb
 
 from loss import base_loss
 
 from .base import BaseVAE
+from .layers import downsample_sequence, upsample_sequence
 
 
 class VAE(BaseVAE):
@@ -17,41 +17,24 @@ class VAE(BaseVAE):
 
         self.gamma = torch.tensor(1.0, requires_grad=True)
 
-        self.encoder = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.ReLU(),
+        self.encoder = downsample_sequence(
+            in_shape=(4, patch_size, patch_size),
+            out_flattened_size=latent_size*2,
+            out_channels=256,
+            num_steps=5
         )
-        self.fc_mu = nn.Linear(patch_size**2 // 2, self.latent_size)
-        self.fc_logvar = nn.Linear(patch_size**2 // 2, self.latent_size)
-        self.fc_decode = nn.Linear(self.latent_size, patch_size**2 // 2)
-
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(
-                128, 64, kernel_size=3, stride=2, padding=1
-            ),  # 128 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                64, 32, kernel_size=4, stride=2, padding=1
-            ),  # 64 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                32, 4, kernel_size=8, stride=2, padding=1
-            ),  # 32 input channels
-            nn.Sigmoid(),
+        self.decoder = upsample_sequence(
+            in_channels=128,
+            in_flattened_size=latent_size,
+            out_shape=(4, patch_size, patch_size),
+            num_steps=5
         )
         # 4 output channels (same as input)
 
     def encode(self, x):
         # Define the encoder part of the VAE
         x = self.encoder(x)
-        x = x.view(x.size(0), -1)
-        mu = self.fc_mu(x)
-        logvar = self.fc_logvar(x)
-        return mu, logvar
+        return x.chunk(2, dim=1)  # Split into mu and logvar
 
     def reparameterize(self, mu, logvar):
         # Reparameterization trick
