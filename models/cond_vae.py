@@ -9,6 +9,7 @@ from tqdm import tqdm
 from loss import cond_loss
 
 from .base import BaseVAE
+from .layers import downsample_sequence, upsample_sequence
 
 
 class Cond_SRVAE(BaseVAE):
@@ -22,54 +23,34 @@ class Cond_SRVAE(BaseVAE):
         self.gammax = torch.tensor(1.0, requires_grad=True)
         self.gammay = torch.tensor(1.0, requires_grad=True)
 
-        self.encoder1 = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
+        self.encoder_y = downsample_sequence(
+            in_shape=(4, int(patch_size//2), int(patch_size//2)),
+            out_flattened_size=self.latent_size_y * 2,
+            out_channels=256,
+            num_steps=5
         )
-        self.fc_mu_1 = nn.Linear(patch_size**2 // 2, self.latent_size_y)
-        self.fc_logvar_1 = nn.Sequential(
-            nn.Linear(patch_size**2 // 2, self.latent_size_y),
-            nn.Hardtanh(-7, 7),
+        
+        self.decoder_y = upsample_sequence(
+            in_flattened_size=(self.latent_size_y),
+            out_shape=(4, patch_size/2, patch_size/2),
+            num_steps=5,
+            in_channels=128
         )
-        self.fc_decode_y = nn.Linear(self.latent_size_y, patch_size**2 // 2)
-        self.decoder_1 = nn.Sequential(
-            nn.ConvTranspose2d(
-                128, 64, kernel_size=3, stride=2, padding=1
-            ),  # 128 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                64, 32, kernel_size=4, stride=2, padding=1
-            ),  # 64 input channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                32, 4, kernel_size=8, stride=2, padding=1
-            ),  # 32 input channels
-            nn.Sigmoid(),
+        
+        self.encoder_x = downsample_sequence(
+            in_shape=(4, patch_size, patch_size),
+            out_flattened_size=self.latent_size * 2,
+            out_channels=256,
+            num_steps=5
         )
 
-        self.encoder2 = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # 64 input channels
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
+        self.decoder_x = upsample_sequence(
+            in_channels=128,
+            in_flattened_size=(self.latent_size),
+            out_shape=(4, patch_size, patch_size),
+            num_steps=5
         )
-        self.fc_mu_2 = nn.Linear(2 * patch_size**2, self.latent_size)
-        self.fc_logvar_2 = nn.Sequential(
-            nn.Linear(2 * patch_size**2, self.latent_size),
-            nn.Hardtanh(-7, 7),
-        )
+        
         self.fc_decode_x = nn.Linear(self.latent_size * 2, 2 * patch_size**2)
         self.decoder_2 = nn.Sequential(
             nn.ConvTranspose2d(
@@ -91,33 +72,8 @@ class Cond_SRVAE(BaseVAE):
             nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
             nn.Sigmoid(),
         )
-        """
-        self.decoder_hf = nn.Sequential(
-            nn.ConvTranspose2d(36, 16, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
-            nn.Sigmoid(),
-        )
-        
-        self.decoder_hf = nn.Sequential(
-            nn.ConvTranspose2d(36, 32, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 32, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 32, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(8, 4, kernel_size=2, stride=1, padding=0),
-            nn.Sigmoid(),
-        )
-        """
         self.y_to_z = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels (
+            nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1),  # 4 input channels 
             nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 32 input channels
@@ -128,6 +84,13 @@ class Cond_SRVAE(BaseVAE):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(patch_size**2 // 2, self.latent_size),
+        )
+
+        self.y_to_z = downsample_sequence(
+            in_shape=(4, patch_size // 2, patch_size // 2),
+            out_flattened_size=self.latent_size,
+            out_channels=128,
+            num_steps=5
         )
         self.u_to_z = nn.Linear(self.latent_size_y, self.latent_size)
         self.mu_u_y_to_z = nn.Linear(self.latent_size * 2, self.latent_size)
@@ -153,19 +116,13 @@ class Cond_SRVAE(BaseVAE):
 
     def encode_y(self, y):
         # Define the encoder part of the VAE
-        y = self.encoder1(y)
-        y = y.view(y.size(0), -1)
-        mu_y = self.fc_mu_1(y)
-        logvar_y = self.fc_logvar_1(y)
-        return mu_y, logvar_y
+        y = self.encoder_y(y)
+        return torch.chunk(y,2, dim=1)
 
     def encode_x(self, x):
         # Define the encoder part of the VAE
-        x = self.encoder2(x)
-        x = x.view(x.size(0), -1)
-        mu_x = self.fc_mu_2(x)
-        logvar_x = self.fc_logvar_2(x)
-        return mu_x, logvar_x
+        x = self.encoder_x(x)
+        return torch.chunk(x,2, dim=1)
 
     def reparameterize(self, mu, logvar):
         # Reparameterization trick
@@ -174,10 +131,7 @@ class Cond_SRVAE(BaseVAE):
         return mu + eps * std
 
     def decode_y(self, u):
-        u = self.fc_decode_y(u)
-        u = u.view(u.size(0), 128, self.patch_size // 16, self.patch_size // 16)
-        y = self.decoder_1(u)
-        return y
+        return self.decoder_y(u)
 
     def decode_x(self, z, y):
         y_enc = self.y_to_z(y)
@@ -467,3 +421,25 @@ class Cond_SRVAE(BaseVAE):
             },
             step=self.current_epoch,
         )
+
+if __name__ == "__main__":
+    # Example usage
+    model = Cond_SRVAE(latent_size=2048, patch_size=64)
+    print(model)
+    x = torch.randn(1,4,64,64)
+    y = torch.randn(1, 4, 32, 32)  # Example condition
+
+    x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x, y)
+    print("x_hat shape:", x_hat.shape)
+    print("y_hat shape:", y_hat.shape)
+    print("mu_z shape:", mu_z.shape)
+    print("logvar_z shape:", logvar_z.shape)
+    print("mu_u shape:", mu_u.shape)
+    print("logvar_u shape:", logvar_u.shape)
+    print("mu_z_uy shape:", mu_z_uy.shape)
+    print("logvar_z_uy shape:", logvar_z_uy.shape)
+
+
+    # You can add more code here to test the model, e.g., training loop, etc.
+    # Note: This is just a placeholder for demonstration purposes.
+    pass
