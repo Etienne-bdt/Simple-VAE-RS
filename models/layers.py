@@ -91,7 +91,7 @@ class downsample_sequence(nn.Module):
         for i in range(steps):
             is_last = i == steps - 1
             stride = stride_plan[i] if i < len(stride_plan) else 1
-            kernel_size = 3 if stride == 2 else 1
+            kernel_size = 5 if stride == 2 else 3
             next_ch = ch_progression[i]
             out_ch = next_ch
             # For last layer, match target_h/target_w
@@ -100,7 +100,6 @@ class downsample_sequence(nn.Module):
             self.layers.append(
                 nn.Conv2d(c, out_ch, kernel_size, stride=stride, padding=padding)
             )
-            self.layers.append(nn.BatchNorm2d(out_ch))
             if not is_last:
                 self.layers.append(nn.ReLU(inplace=True))
             c = out_ch
@@ -187,8 +186,8 @@ class upsample_sequence(nn.Module):
                 kernel_size = 4
                 padding = 1
             else:
-                kernel_size = 1
-                padding = 0
+                kernel_size = 3
+                padding = 1
             next_ch = ch_progression[i]
             out_ch = next_ch
             # output_padding must be int, not tuple
@@ -196,7 +195,6 @@ class upsample_sequence(nn.Module):
             self.layers.append(
                 nn.ConvTranspose2d(c, out_ch, kernel_size, stride=stride, padding=padding, output_padding=output_padding)
             )
-            self.layers.append(nn.BatchNorm2d(out_ch))
             if not is_last:
                 self.layers.append(nn.ReLU(inplace=True))
             # Update h, w using the ConvTranspose2d formula
