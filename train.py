@@ -33,7 +33,7 @@ def main(args):
         callbacks.EarlyStopping(patience=25, delta=0.01),
     ]
     if args.model_type == "VAE":
-        model = models.VAE(latent_size, args.patch_size, callbacks=callbacks_list)
+        model = models.VAE(latent_size, args.patch_size//2, callbacks=callbacks_list)
     elif args.model_type == "Cond_SRVAE":
         model = models.Cond_SRVAE(
             latent_size, args.patch_size, callbacks=callbacks_list
