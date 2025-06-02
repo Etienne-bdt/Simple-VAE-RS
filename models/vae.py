@@ -130,7 +130,7 @@ class VAE(BaseVAE):
 
             # log aggregate metrics
             wandb_run.log(
-                {"VAE/SSIM": avg_ssim, "VAE/LPIPS": avg_lpips},
+                {"Metrics/SSIM": avg_ssim, "Metrics/LPIPS": avg_lpips},
                 step=epoch,
             )
 
