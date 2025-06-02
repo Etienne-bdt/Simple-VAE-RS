@@ -382,7 +382,11 @@ class Cond_SRVAE(BaseVAE):
                 # Compute SSIM and LPIPS scores
                 for bcb, hr in zip(hr_interp, x_val):
                     ssim_val = self.ssim(
-                        hr, bcb, win_size=11, data_range=1.0, channel_axis=0
+                        hr.numpy(),
+                        bcb.numpy(),
+                        win_size=11,
+                        data_range=1.0,
+                        channel_axis=0,
                     )
                     lpips = self.lpips_fn(
                         hr[[2, 1, 0]].unsqueeze(0), bcb[[2, 1, 0]].unsqueeze(0)
