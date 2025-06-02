@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 import models
 
 
-def test(device, model: models.Cond_SRVAE, val_loader):
+def sr_task(device, model: models.Cond_SRVAE, val_loader):
     """
     Test the model on the validation set and compute error maps for a given image.
     Args:
