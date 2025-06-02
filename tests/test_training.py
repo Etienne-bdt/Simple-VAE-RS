@@ -27,7 +27,7 @@ def test_vae_training_loop_runs_one_epoch():
     x_data = torch.randn(2, 4, 8, 8)
     ds = TensorDataset(x_data, x_data)
     loader = DataLoader(ds, batch_size=2)
-    model = VAE(latent_size=8, patch_size=8)
+    model = VAE(latent_size=128, patch_size=8)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     # should finish without error
     model.fit(
@@ -48,7 +48,7 @@ def test_cond_vae_training_loop_runs_one_epoch():
     y_data = torch.randn(2, 4, 4, 4)
     ds = TensorDataset(y_data, x_data)
     loader = DataLoader(ds, batch_size=2)
-    model = Cond_SRVAE(latent_size=8, patch_size=8)
+    model = Cond_SRVAE(latent_size=128, patch_size=8)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.fit(
         train_loader=loader,
