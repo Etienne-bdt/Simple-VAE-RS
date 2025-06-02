@@ -8,22 +8,24 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
     name: uv
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux_2_17_x86_64
     steps:
       - uses: actions/checkout@v4
-      - name: Read Python version
-        id: read_py
-        run: |
-          echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
 
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: .python-version
+
       - name: Install deps
         run: |
+          python -m ensurepip --upgrade
           python -m pip install --upgrade pip
           pip install uv
+
       - name: Sync deps
-        run: "uv sync && uv venv"
+        run: |
+          uv sync && uv venv
