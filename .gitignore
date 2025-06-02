@@ -17,3 +17,4 @@ floods/
 *.png
 results/*/*/wandb/
 wandb/*
+*.egg-info/*
