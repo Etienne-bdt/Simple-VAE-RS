@@ -4,10 +4,10 @@ from typing import List
 import lpips
 import torch
 import torch.nn as nn
-import wandb
 from skimage import metrics as skmetrics
 from tqdm import tqdm
 
+import wandb
 from callbacks import Callback
 
 
@@ -132,7 +132,10 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     val_loss += loss.item()
 
                 if epoch % val_metrics_every == 0 or epoch in [1, epochs]:
-                    self.evaluate(val_loader, self.wandb_run, epoch)
+                    full_val = False
+                else:
+                    full_val = True
+                self.evaluate(val_loader, self.wandb_run, epoch, full_val=full_val)
 
             # Average the validation loss terms
             for key in val_terms_dict:
@@ -198,13 +201,14 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError("val_step must be implemented in the derived class.")
 
     @abc.abstractmethod
-    def evaluate(self, val_loader, wandb_run, epoch):
+    def evaluate(self, val_loader, wandb_run, epoch, full_val):
         """
         Evaluate the model on the validation set.
         Args:
             val_loader: DataLoader for validation data
             wandb_run: wandb run instance for logging
             epoch: current epoch number
+            full_val: whether to compute full validation metrics or just log part of it
         """
         raise NotImplementedError("evaluate must be implemented in the derived class.")
 
