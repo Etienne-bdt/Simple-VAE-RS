@@ -32,4 +32,3 @@ jobs:
         run: uv sync
       - name: Run tests
         run: pytest -q ${{ matrix.file }}
-name: pytest
