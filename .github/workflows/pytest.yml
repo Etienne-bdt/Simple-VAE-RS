@@ -25,7 +25,7 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install toml uv
+          pip install uv
       - name: Sync dependencies via uv
         run: uv sync && uv venv && source .venv/bin/activate
       - name: Run tests
