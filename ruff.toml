@@ -50,7 +50,7 @@ unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [lint.isort]
-known-third-party = ["wandb"]
+known-third-party = ["wandb", "toml"]
 
 [format]
 # Like Black, use double quotes for strings.

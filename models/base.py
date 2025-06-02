@@ -169,6 +169,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             )
 
         self.wandb_run.finish()
+        return
 
     @abc.abstractmethod
     def forward(self, *args, **kwargs):
