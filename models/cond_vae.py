@@ -24,39 +24,38 @@ class Cond_SRVAE(BaseVAE):
         self.gammay = torch.tensor(1.0, requires_grad=True)
 
         self.encoder_y = downsample_sequence(
-            in_shape=(4, int(patch_size//2), int(patch_size//2)),
+            in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
             out_flattened_size=self.latent_size_y * 2,
             out_channels=256,
-            num_steps=10
+            num_steps=10,
         )
-        
+
         self.decoder_y = upsample_sequence(
             in_flattened_size=(self.latent_size_y),
-            out_shape=(4, patch_size/2, patch_size/2),
+            out_shape=(4, patch_size / 2, patch_size / 2),
             num_steps=10,
-            in_channels=128
+            in_channels=128,
         )
-        
+
         self.encoder_x = downsample_sequence(
             in_shape=(4, patch_size, patch_size),
             out_flattened_size=self.latent_size * 2,
             out_channels=256,
-            num_steps=10
+            num_steps=10,
         )
 
         self.decoder_x = upsample_sequence(
             in_channels=256,
             in_flattened_size=(self.latent_size * 2),
             out_shape=(4, patch_size, patch_size),
-            num_steps=10
+            num_steps=10,
         )
-        
 
         self.y_to_z = downsample_sequence(
             in_shape=(4, patch_size // 2, patch_size // 2),
             out_flattened_size=self.latent_size,
             out_channels=128,
-            num_steps=10
+            num_steps=10,
         )
         # Replace Linear layers with Conv-based alternatives
         # u_to_z: expects input of shape (batch, latent_size_y)
@@ -64,14 +63,14 @@ class Cond_SRVAE(BaseVAE):
         self.u_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size_y, 1, 1)),
             nn.Conv2d(self.latent_size_y, self.latent_size, kernel_size=1),
-            nn.Flatten(1)
+            nn.Flatten(1),
         )
         # mu_u_y_to_z and logvar_u_y_to_z: input is (batch, latent_size*2)
         # We'll reshape to (batch, latent_size*2, 1, 1) and use 1x1 Conv
         self.mu_u_y_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
-            nn.Flatten(1)
+            nn.Flatten(1),
         )
         self.logvar_u_y_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
@@ -98,12 +97,12 @@ class Cond_SRVAE(BaseVAE):
     def encode_y(self, y):
         # Define the encoder part of the VAE
         y = self.encoder_y(y)
-        return torch.chunk(y,2, dim=1)
+        return torch.chunk(y, 2, dim=1)
 
     def encode_x(self, x):
         # Define the encoder part of the VAE
         x = self.encoder_x(x)
-        return torch.chunk(x,2, dim=1)
+        return torch.chunk(x, 2, dim=1)
 
     def reparameterize(self, mu, logvar):
         # Reparameterization trick
@@ -193,12 +192,13 @@ class Cond_SRVAE(BaseVAE):
         )
         loss = mse_x + kld_u + mse_y + kld_z
         logs = {
-            "loss": loss.item(),
-            "mse_x": mse_x.item(),
-            "kld_u": kld_u.item(),
-            "mse_y": mse_y.item(),
-            "kld_z": kld_z.item(),
+            "Loss/loss": loss.item(),
+            "Loss/mse_x": mse_x.item(),
+            "Loss/kld_u": kld_u.item(),
+            "Loss/mse_y": mse_y.item(),
+            "Loss/kld_z": kld_z.item(),
         }
+        torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
         return loss, logs
 
     def val_step(self, batch, device):
@@ -224,113 +224,124 @@ class Cond_SRVAE(BaseVAE):
             )
             loss = mse_x + kld_u + mse_y + kld_z
         logs = {
-            "val_loss": loss.item(),
-            "val_mse_x": mse_x.item(),
-            "val_kld_u": kld_u.item(),
-            "val_mse_y": mse_y.item(),
-            "val_kld_z": kld_z.item(),
+            "Loss/val_loss": loss.item(),
+            "Loss/val_mse_x": mse_x.item(),
+            "Loss/val_kld_u": kld_u.item(),
+            "Loss/val_mse_y": mse_y.item(),
+            "Loss/val_kld_z": kld_z.item(),
         }
         return loss, logs
 
-    def evaluate(self, val_loader, wandb_run, epoch):
+    def evaluate(self, val_loader, wandb_run, epoch, full_val=False):
         # CondVAE eval: aggregate SSIM & LPIPS over full validation set
 
         device = next(self.parameters()).device
 
-        total = {
-            "ssim_y": 0.0,
-            "lpips_y": 0.0,
-            "ssim_x": 0.0,
-            "lpips_x": 0.0,
-            "ssim_sr": 0.0,
-            "lpips_sr": 0.0,
-        }
-        count = 0
-        first = True
+        if full_val:
+            total = {
+                "ssim_y": 0.0,
+                "lpips_y": 0.0,
+                "ssim_x": 0.0,
+                "lpips_x": 0.0,
+                "ssim_sr": 0.0,
+                "lpips_sr": 0.0,
+            }
+            count = 0
+            first = True
+            for batch in val_loader:
+                y, x = [t.to(device) for t in batch]
+                with torch.no_grad():
+                    x_hat, y_hat, *_ = self.forward(x, y)
+                    x_sr = self.conditional_generation(y)
 
-        for batch in val_loader:
+                b = y.size(0)
+                count += b
+
+                for oy, ry, ox, rx, gen in zip(y, y_hat, x, x_hat, x_sr):
+                    ssim_y = self.ssim(
+                        oy.cpu().numpy(),
+                        ry.cpu().numpy(),
+                        win_size=11,
+                        data_range=1.0,
+                        channel_axis=0,
+                    )
+                    total["ssim_y"] += ssim_y
+                    total["lpips_y"] += self.lpips_fn(
+                        oy[[2, 1, 0]].unsqueeze(0), ry[[2, 1, 0]].unsqueeze(0)
+                    ).item()
+                    ssim_x = self.ssim(
+                        ox.cpu().numpy(),
+                        rx.cpu().numpy(),
+                        win_size=11,
+                        data_range=1.0,
+                        channel_axis=0,
+                    )
+                    total["ssim_x"] += ssim_x
+                    total["lpips_x"] += self.lpips_fn(
+                        ox[[2, 1, 0]].unsqueeze(0), rx[[2, 1, 0]].unsqueeze(0)
+                    ).item()
+                    ssim_sr = self.ssim(
+                        ox.cpu().numpy(),
+                        gen.cpu().numpy(),
+                        win_size=11,
+                        data_range=1.0,
+                        channel_axis=0,
+                    )
+                    total["ssim_sr"] += ssim_sr
+                    total["lpips_sr"] += self.lpips_fn(
+                        ox[[2, 1, 0]].unsqueeze(0), gen[[2, 1, 0]].unsqueeze(0)
+                    ).item()
+
+                if first:
+                    imgs = {
+                        "y_hat": y_hat[:4],
+                        "x_hat": x_hat[:4],
+                        "x_sr": x_sr[:4],
+                    }
+                    first = False
+
+            # average metrics
+            avg = {k: total[k] / count for k in total}
+
+            # log aggregate metrics
+            wandb_run.log(
+                {
+                    "Metrics/SSIM_LR": avg["ssim_y"],
+                    "Metrics/LPIPS_LR": avg["lpips_y"],
+                    "Metrics/SSIM_HR": avg["ssim_x"],
+                    "Metrics/LPIPS_HR": avg["lpips_x"],
+                    "Metrics/SSIM_SR": avg["ssim_sr"],
+                    "Metrics/LPIPS_SR": avg["lpips_sr"],
+                    "Metrics/SSIM_Baseline": self.ssim_base,
+                    "Metrics/LPIPS_Baseline": self.lpips_base,
+                },
+                step=epoch,
+            )
+        else:
+            batch = next(iter(val_loader))
             y, x = [t.to(device) for t in batch]
             with torch.no_grad():
                 x_hat, y_hat, *_ = self.forward(x, y)
                 x_sr = self.conditional_generation(y)
 
-            b = y.size(0)
-            count += b
-
-            for oy, ry, ox, rx, gen in zip(y, y_hat, x, x_hat, x_sr):
-                ssim_y = self.ssim(
-                    oy.cpu().numpy(),
-                    ry.cpu().numpy(),
-                    win_size=11,
-                    data_range=1.0,
-                    channel_axis=0,
-                )
-                total["ssim_y"] += ssim_y
-                total["lpips_y"] += self.lpips_fn(
-                    oy[[2, 1, 0]].unsqueeze(0), ry[[2, 1, 0]].unsqueeze(0)
-                ).item()
-                ssim_x = self.ssim(
-                    ox.cpu().numpy(),
-                    rx.cpu().numpy(),
-                    win_size=11,
-                    data_range=1.0,
-                    channel_axis=0,
-                )
-                total["ssim_x"] += ssim_x
-                total["lpips_x"] += self.lpips_fn(
-                    ox[[2, 1, 0]].unsqueeze(0), rx[[2, 1, 0]].unsqueeze(0)
-                ).item()
-                ssim_sr = self.ssim(
-                    ox.cpu().numpy(),
-                    gen.cpu().numpy(),
-                    win_size=11,
-                    data_range=1.0,
-                    channel_axis=0,
-                )
-                total["ssim_sr"] += ssim_sr
-                total["lpips_sr"] += self.lpips_fn(
-                    ox[[2, 1, 0]].unsqueeze(0), gen[[2, 1, 0]].unsqueeze(0)
-                ).item()
-
-            if first:
-                imgs = {
-                    "y": y[:4],
-                    "y_hat": y_hat[:4],
-                    "x_hat": x_hat[:4],
-                    "x_sr": x_sr[:4],
-                }
-                first = False
-
-        # average metrics
-        avg = {k: total[k] / count for k in total}
-
-        # log aggregate metrics
-        wandb_run.log(
-            {
-                "CondVAE/SSIM_LR": avg["ssim_y"],
-                "CondVAE/LPIPS_LR": avg["lpips_y"],
-                "CondVAE/SSIM_HR": avg["ssim_x"],
-                "CondVAE/LPIPS_HR": avg["lpips_x"],
-                "CondVAE/SSIM_SR": avg["ssim_sr"],
-                "CondVAE/LPIPS_SR": avg["lpips_sr"],
-                "CondVAE/SSIM_Baseline": self.ssim_base,
-                "CondVAE/LPIPS_Baseline": self.lpips_base,
-            },
-            step=epoch,
-        )
+            imgs = {
+                "y_hat": y_hat[:4],
+                "x_hat": x_hat[:4],
+                "x_sr": x_sr[:4],
+            }
 
         # log sample images
         wandb_run.log(
             {
-                "CondVAE/LR_Recon": [
+                "Images/LR_Recon": [
                     wandb.Image(img.permute(1, 2, 0).cpu().numpy())
                     for img in imgs["y_hat"]
                 ],
-                "CondVAE/HR_Recon": [
+                "Images/HR_Recon": [
                     wandb.Image(img.permute(1, 2, 0).cpu().numpy())
                     for img in imgs["x_hat"]
                 ],
-                "CondVAE/SR_Output": [
+                "Images/SR_Output": [
                     wandb.Image(img.permute(1, 2, 0).cpu().numpy())
                     for img in imgs["x_sr"]
                 ],
@@ -394,18 +405,19 @@ class Cond_SRVAE(BaseVAE):
     def on_train_epoch_end(self, **kwargs):
         self.wandb_run.log(
             {
-                "CondVAE/Gamma_X": self.gammax.item(),
-                "CondVAE/Gamma_Y": self.gammay.item(),
-                "CondVAE/Learning Rate": self.scheduler.get_last_lr()[0],
+                "HyperParameters/Gamma_X": self.gammax.item(),
+                "HyperParameters/Gamma_Y": self.gammay.item(),
+                "HyperParameters/Learning Rate": self.scheduler.get_last_lr()[0],
             },
             step=self.current_epoch,
         )
+
 
 if __name__ == "__main__":
     # Example usage
     model = Cond_SRVAE(latent_size=2048, patch_size=64)
     print(model)
-    x = torch.randn(1,4,64,64)
+    x = torch.randn(1, 4, 64, 64)
     y = torch.randn(1, 4, 32, 32)  # Example condition
 
     x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x, y)
@@ -417,7 +429,6 @@ if __name__ == "__main__":
     print("logvar_u shape:", logvar_u.shape)
     print("mu_z_uy shape:", mu_z_uy.shape)
     print("logvar_z_uy shape:", logvar_z_uy.shape)
-
 
     # You can add more code here to test the model, e.g., training loop, etc.
     # Note: This is just a placeholder for demonstration purposes.

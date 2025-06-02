@@ -100,7 +100,9 @@ class downsample_sequence(nn.Module):
             self.layers.append(
                 nn.Conv2d(c, out_ch, kernel_size, stride=stride, padding=padding)
             )
+            # If not last layer, add ReLU activation
             if not is_last:
+                self.layers.append(nn.BatchNorm2d(out_ch))
                 self.layers.append(nn.ReLU(inplace=True))
             c = out_ch
             h = calculate_output_size(h, kernel_size, stride, padding)
@@ -130,7 +132,9 @@ class upsample_sequence(nn.Module):
         super(upsample_sequence, self).__init__()
         assert in_flattened_size is not None, "Must specify in_flattened_size"
         assert out_shape is not None, "Must specify out_shape (C, H, W)"
-        assert in_channels is not None, "Must specify in_channels (should match downsample out_channels)"
+        assert in_channels is not None, (
+            "Must specify in_channels (should match downsample out_channels)"
+        )
         out_channels = out_shape[0]  # Always infer from out_shape
         self.sigmoid = nn.Sigmoid()
         target_h, target_w = out_shape[1], out_shape[2]
@@ -140,10 +144,11 @@ class upsample_sequence(nn.Module):
         self.layers = nn.ModuleList()
         # Infer in_h, in_w from in_flattened_size and in_channels
 
-
         total_spatial = in_flattened_size // in_channels
-        in_h = in_w = int(total_spatial ** 0.5)
-        assert in_h * in_w * in_channels == in_flattened_size, "in_flattened_size must be divisible by in_channels and form a square shape"
+        in_h = in_w = int(total_spatial**0.5)
+        assert in_h * in_w * in_channels == in_flattened_size, (
+            "in_flattened_size must be divisible by in_channels and form a square shape"
+        )
         self.in_channels = in_channels
         self.in_h = in_h
         self.in_w = in_w
@@ -172,7 +177,7 @@ class upsample_sequence(nn.Module):
         else:
             stride_plan = []
         if steps > 1:
-            ch_progression = [max(out_channels, c // (4 ** i)) for i in range(steps)]
+            ch_progression = [max(out_channels, c // (4**i)) for i in range(steps)]
             ch_progression[-1] = out_channels  # Ensure last is exactly out_channels
         else:
             ch_progression = [out_channels]
@@ -193,7 +198,14 @@ class upsample_sequence(nn.Module):
             # output_padding must be int, not tuple
             output_padding = 0
             self.layers.append(
-                nn.ConvTranspose2d(c, out_ch, kernel_size, stride=stride, padding=padding, output_padding=output_padding)
+                nn.ConvTranspose2d(
+                    c,
+                    out_ch,
+                    kernel_size,
+                    stride=stride,
+                    padding=padding,
+                    output_padding=output_padding,
+                )
             )
             if not is_last:
                 self.layers.append(nn.ReLU(inplace=True))
@@ -203,7 +215,9 @@ class upsample_sequence(nn.Module):
             c = out_ch
         self.final_shape = (c, h, w)
         if not (c == out_channels and h == target_h and w == target_w):
-            raise RuntimeError(f"Upsample sequence produced invalid shape {c}x{h}x{w}, expected {out_channels}x{target_h}x{target_w}. Check your configuration.")
+            raise RuntimeError(
+                f"Upsample sequence produced invalid shape {c}x{h}x{w}, expected {out_channels}x{target_h}x{target_w}. Check your configuration."
+            )
 
     def forward(self, x):
         x = self.unflatten(x)
@@ -230,8 +244,9 @@ if __name__ == "__main__":
     # Example usage for upsample_sequence
     upmodel = upsample_sequence(
         in_channels=256,
-        in_flattened_size=out_flattened_size, 
-        out_shape=(4, 32, 32), num_steps=5
+        in_flattened_size=out_flattened_size,
+        out_shape=(4, 32, 32),
+        num_steps=5,
     )
     print(upmodel)
 

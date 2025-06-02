@@ -3,13 +3,14 @@ name = "super-resolution-vae"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13.3"
 dependencies = [
     "imagecodecs>=2025.3.30",
     "lpips>=0.1.4",
     "matplotlib>=3.10.3",
     "numpy>=2.2.6",
     "polars>=1.30.0",
+    "pre-commit>=4.2.0",
     "ruff>=0.11.11",
     "scikit-image>=0.25.2",
     "tensorboard>=2.19.0",
