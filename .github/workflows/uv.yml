@@ -1,0 +1,29 @@
+name: uv
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: uv
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Python version
+        id: read_py
+        run: |
+          echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+      - name: Sync deps
+        run: "uv sync && uv venv"
