@@ -352,6 +352,7 @@ class Cond_SRVAE(BaseVAE):
     def on_train_start(self, **kwargs):
         self.gammax.requires_grad = True
         self.gammay.requires_grad = True
+        device = next(self.parameters()).device
         self.optimizer.add_param_group(
             {
                 "params": [self.gammax, self.gammay],
@@ -374,8 +375,7 @@ class Cond_SRVAE(BaseVAE):
             ssim_cumu, lpips_cumu = 0, 0
             for _, batch in tqdm(enumerate(val_loader)):
                 y_val, x_val = batch
-                y_val = y_val.cuda()
-                x_val = x_val.cuda()
+                y_val, x_val = y_val.to(device), x_val.to(device)
 
                 hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
 
