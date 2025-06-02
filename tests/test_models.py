@@ -18,7 +18,7 @@ def test_vae_forward_and_loss_shapes():
 
 
 def test_cond_vae_forward_and_loss_shapes():
-    latent_size = 128
+    latent_size = 128 * 4
     patch_size = 8
     model = Cond_SRVAE(latent_size=latent_size, patch_size=patch_size)
     x = torch.randn(2, 4, patch_size, patch_size)
