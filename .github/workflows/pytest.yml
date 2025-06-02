@@ -27,8 +27,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest toml uv
       - name: Sync dependencies via uv
-        run: uv sync
-        run: uv venv
-        run: source .venv/bin/activate
+        run: uv sync && uv venv && source .venv/bin/activate
       - name: Run tests
         run: pytest -q ${{ matrix.file }}
