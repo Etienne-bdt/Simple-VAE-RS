@@ -2,7 +2,7 @@
 
 #SBATCH --nodes=1
 #SBATCH --time=3-00:00:00
-#SBATCH --job-name=Conditionnal_VAE
+#SBATCH --job-name=Conditional_VAE
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
 #SBATCH --partition=gpu02

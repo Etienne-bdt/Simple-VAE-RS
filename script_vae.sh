@@ -2,7 +2,7 @@
 
 #SBATCH --nodes=1
 #SBATCH --time=3-00:00:00
-#SBATCH --job-name=Conditionnal_VAE
+#SBATCH --job-name=Full_Conditional_VAE
 #SBATCH -o ./slurm_logs/slurm.%j.out # STDOUT
 #SBATCH -e ./slurm_logs/slurm.%j.err # STDERR
 #SBATCH --partition=gpu02
@@ -17,4 +17,4 @@ source .venv/bin/activate
 
 export SCRATCH="/scratch/disc/e.bardet/"
 
-python train.py --patch_size 64 --batch_size 2 --pre_epochs 0 --val_metrics_every 20 --epochs 500 -l 2048 --model_type VAE
+python train.py --patch_size 256 --batch_size 2 --pre_epochs 0 --val_metrics_every 20 --epochs 500 -l 32768 --model_type VAE

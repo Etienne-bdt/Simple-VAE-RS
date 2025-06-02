@@ -62,18 +62,30 @@ class Cond_SRVAE(BaseVAE):
         # We'll reshape to (batch, channels, 1, 1) and use a 1x1 Conv
         self.u_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size_y, 1, 1)),
-            nn.Conv2d(self.latent_size_y, self.latent_size, kernel_size=1),
+            nn.Conv2d(self.latent_size_y, self.latent_size_y * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size_y * 2, self.latent_size_y * 3, kernel_size=1),
+            nn.Conv2d(self.latent_size_y * 3, self.latent_size, kernel_size=1),
+            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
+            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
             nn.Flatten(1),
         )
         # mu_u_y_to_z and logvar_u_y_to_z: input is (batch, latent_size*2)
         # We'll reshape to (batch, latent_size*2, 1, 1) and use 1x1 Conv
         self.mu_u_y_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
             nn.Flatten(1),
         )
         self.logvar_u_y_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
+            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
             nn.Flatten(1),
             nn.Hardtanh(-7, 7),
