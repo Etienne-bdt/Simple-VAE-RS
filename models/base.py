@@ -138,9 +138,9 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     val_loss += loss.item()
 
                 if epoch % val_metrics_every == 0 or epoch in [1, epochs]:
-                    full_val = False
-                else:
                     full_val = True
+                else:
+                    full_val = False
                 self.evaluate(val_loader, self.wandb_run, epoch, full_val=full_val)
 
             # Average the validation loss terms
@@ -169,6 +169,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             )
 
         self.wandb_run.finish()
+        return
 
     @abc.abstractmethod
     def forward(self, *args, **kwargs):

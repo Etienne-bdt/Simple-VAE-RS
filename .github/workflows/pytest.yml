@@ -1,0 +1,35 @@
+name: pytest
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        file:
+          - tests/test_models.py
+          - tests/test_training.py
+          - tests/test_env.py
+    name: pytest – ${{ matrix.file }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Python version
+        id: read_py
+        run: |
+          echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_ENV
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest toml
+      - name: Run tests
+        run: pytest -q ${{ matrix.file }}

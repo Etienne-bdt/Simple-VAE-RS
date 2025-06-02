@@ -20,5 +20,15 @@ dependencies = [
     "wandb>=0.19.11",
 ]
 
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["dataset", "utils", "callbacks", "task", "train"]
+
+[tool.setuptools.packages.find]
+include = ["loss", "loss.*", "models", "models.*"]
+
 [tool.uv]
 link-mode = "symlink"

@@ -352,6 +352,7 @@ class Cond_SRVAE(BaseVAE):
     def on_train_start(self, **kwargs):
         self.gammax.requires_grad = True
         self.gammay.requires_grad = True
+        device = next(self.parameters()).device
         self.optimizer.add_param_group(
             {
                 "params": [self.gammax, self.gammay],
@@ -374,15 +375,18 @@ class Cond_SRVAE(BaseVAE):
             ssim_cumu, lpips_cumu = 0, 0
             for _, batch in tqdm(enumerate(val_loader)):
                 y_val, x_val = batch
-                y_val = y_val.cuda()
-                x_val = x_val.cuda()
+                y_val, x_val = y_val.to(device), x_val.to(device)
 
                 hr_interp = F.interpolate(y_val, scale_factor=2, mode="bicubic")
 
                 # Compute SSIM and LPIPS scores
                 for bcb, hr in zip(hr_interp, x_val):
                     ssim_val = self.ssim(
-                        hr, bcb, win_size=11, data_range=1.0, channel_axis=0
+                        hr.numpy(),
+                        bcb.numpy(),
+                        win_size=11,
+                        data_range=1.0,
+                        channel_axis=0,
                     )
                     lpips = self.lpips_fn(
                         hr[[2, 1, 0]].unsqueeze(0), bcb[[2, 1, 0]].unsqueeze(0)
