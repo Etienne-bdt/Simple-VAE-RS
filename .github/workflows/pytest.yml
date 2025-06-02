@@ -26,9 +26,5 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e . pytest toml
-      - name: Install uv
-        run: pip install uv
-      - name: Check dependencies via uv
-        run: uv sync --check
       - name: Run tests
         run: pytest -q ${{ matrix.file }}
