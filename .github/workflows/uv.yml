@@ -22,8 +22,10 @@ jobs:
         run: |
           python -m ensurepip --upgrade
           python -m pip install --upgrade pip
-          pip install uv
-
-      - name: Sync deps
-        run: |
-          uv sync && uv venv
+          pip download \
+            --only-binary=:all: \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --abi cp313 \
+            --python-version 3.13 \
+            .
