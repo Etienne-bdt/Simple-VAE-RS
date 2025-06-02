@@ -3,7 +3,7 @@ name = "super-resolution-vae"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13.3"
 dependencies = [
     "imagecodecs>=2025.3.30",
     "lpips>=0.1.4",

@@ -1,6 +1,6 @@
 import torch
-
 import wandb
+
 from loss import base_loss
 
 from .base import BaseVAE
