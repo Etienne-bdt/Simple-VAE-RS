@@ -1,4 +1,5 @@
 import abc
+from math import isnan
 from typing import List
 
 import lpips
@@ -107,6 +108,11 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                 terms_dict[key] /= len(train_loader)
             self.terms_dict = terms_dict
             train_loss /= len(train_loader)
+
+            if isnan(train_loss):
+                raise ValueError(
+                    f"NaN detected in training loss at epoch {epoch}. Check your model and data."
+                )
 
             self.on_train_epoch_end()
             self.eval()
