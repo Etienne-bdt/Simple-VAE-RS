@@ -70,7 +70,11 @@ class VAE(BaseVAE):
         x_hat, mu, logvar = self.forward(x)
         mse, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
         loss = mse + kld
-        logs = {"Loss/loss": loss.item(), "Loss/kld": kld.item()}
+        logs = {
+            "Loss/loss": loss.item(),
+            "Loss/mse": mse.item(),
+            "Loss/kld": kld.item(),
+        }
         return loss, logs
 
     def val_step(self, batch, device):
@@ -86,7 +90,11 @@ class VAE(BaseVAE):
                 self.gamma,
             )
         loss = mse + kld
-        logs = {"Loss/val_loss": loss.item(), "Loss/val_kld": kld.item()}
+        logs = {
+            "Loss/val_loss": loss.item(),
+            "Loss/val_mse": mse.item(),
+            "Loss/val_kld": kld.item(),
+        }
         return loss, logs
 
     def evaluate(self, val_loader, wandb_run, epoch, full_val=False):
