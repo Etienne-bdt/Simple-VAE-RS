@@ -94,6 +94,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                 optimizer.zero_grad()
                 loss, terms = self.train_step(batch, device)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
                 optimizer.step()
                 if not terms_dict:
                     terms_dict = terms

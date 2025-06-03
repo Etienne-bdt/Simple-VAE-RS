@@ -206,7 +206,6 @@ class Cond_SRVAE(BaseVAE):
             "Loss/mse_y": mse_y.item(),
             "Loss/kld_z": kld_z.item(),
         }
-        torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
         return loss, logs
 
     def val_step(self, batch, device):
