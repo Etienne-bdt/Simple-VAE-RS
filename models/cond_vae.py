@@ -63,9 +63,7 @@ class Cond_SRVAE(BaseVAE):
         self.u_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size_y, 1, 1)),
             nn.Conv2d(self.latent_size_y, self.latent_size_y * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size_y * 2, self.latent_size_y * 3, kernel_size=1),
-            nn.Conv2d(self.latent_size_y * 3, self.latent_size, kernel_size=1),
-            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
+            nn.Conv2d(self.latent_size_y * 2, self.latent_size, kernel_size=1),
             nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
             nn.Flatten(1),
         )
@@ -75,8 +73,6 @@ class Cond_SRVAE(BaseVAE):
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
             nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
             nn.Flatten(1),
         )
@@ -84,12 +80,12 @@ class Cond_SRVAE(BaseVAE):
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
             nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
             nn.Flatten(1),
             nn.Hardtanh(-7, 7),
         )
+
+        self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def z_cond(self, y, u):
         # Define the encoder part of the VAE

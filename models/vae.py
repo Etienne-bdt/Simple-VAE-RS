@@ -42,6 +42,7 @@ class VAE(BaseVAE):
             num_steps=10,
         )
         # 4 output channels (same as input)
+        self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def encode(self, x):
         # Define the encoder part of the VAE
@@ -144,11 +145,18 @@ class VAE(BaseVAE):
                 imgs_out = x_hat[:4]
 
         # log sample images
+        if epoch == 1:
+            wandb_run.log(
+                {
+                    "Images/Input": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs_in
+                    ],
+                },
+                step=epoch,
+            )
         wandb_run.log(
             {
-                "Images/Input": [
-                    wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in imgs_in
-                ],
                 "Images/Reconstruction": [
                     wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in imgs_out
                 ],

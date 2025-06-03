@@ -40,7 +40,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         self.val_loader = val_loader
         self.optimizer = optimizer
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=10
+            self.optimizer, mode="min", factor=1, patience=10
         )
         self.current_epoch: int = 0
         self.lpips_fn = self.lpips_fn.to(device)
