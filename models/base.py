@@ -27,6 +27,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         self.callbacks: List[Callback] = callbacks
         self.ssim = skmetrics.structural_similarity
         self.lpips_fn = lpips.LPIPS(net="alex")
+        self.num_params: int = 0
 
     def fit(self, train_loader, val_loader, device, optimizer, epochs=1000, **kwargs):
         """
@@ -40,7 +41,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         self.val_loader = val_loader
         self.optimizer = optimizer
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=1, patience=10
+            self.optimizer, mode="min", factor=0.5, patience=500
         )
         self.current_epoch: int = 0
         self.lpips_fn = self.lpips_fn.to(device)
@@ -63,6 +64,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     "batch_size": b,
                     "val_metrics_every": val_metrics_every,
                     "slurm_job_id": kwargs.get("slurm_job_id", "local"),
+                    "Parameter_number": self.num_params,
                 },
             ),
         )
