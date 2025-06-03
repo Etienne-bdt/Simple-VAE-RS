@@ -68,7 +68,8 @@ class VAE(BaseVAE):
         x, _ = batch
         x = x.to(device)
         x_hat, mu, logvar = self.forward(x)
-        loss, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
+        mse, kld = base_loss(x_hat, x, mu, logvar, self.gamma)
+        loss = mse + kld
         logs = {"Loss/loss": loss.item(), "Loss/kld": kld.item()}
         return loss, logs
 
@@ -77,13 +78,14 @@ class VAE(BaseVAE):
         x = x.to(device)
         with torch.no_grad():
             x_hat, mu, logvar = self.forward(x)
-            loss, kld = base_loss(
+            mse, kld = base_loss(
                 x_hat,
                 x,
                 mu,
                 logvar,
                 self.gamma,
             )
+        loss = mse + kld
         logs = {"Loss/val_loss": loss.item(), "Loss/val_kld": kld.item()}
         return loss, logs
 
