@@ -1,5 +1,7 @@
 # Conditional Super Resolution VAE
 
+Code repo of my internship subject at [ISAE-SUPAERO](https://www.isae-supaero.fr/)
+
 Inspired by [1] I. Gatopoulos, M. Stol, et J. M. Tomczak, « Super-resolution variational auto-encoders », arXiv preprint arXiv:2006.05218, 2020, [Online] Available at : https://arxiv.org/pdf/2006.05218
 
 This repository contains an implementation of the Conditional VAE applied to Super Resolution of Satellite Images.
