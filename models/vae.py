@@ -33,13 +33,13 @@ class VAE(BaseVAE):
             in_shape=(4, patch_size, patch_size),
             out_flattened_size=latent_size * 2,
             out_channels=256,
-            num_steps=10,
+            num_steps=5,
         )
         self.decoder = upsample_sequence(
             in_channels=128,
             in_flattened_size=latent_size,
             out_shape=(4, patch_size, patch_size),
-            num_steps=10,
+            num_steps=5,
         )
         # 4 output channels (same as input)
         self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)

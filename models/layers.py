@@ -97,6 +97,7 @@ class downsample_sequence(nn.Module):
             # For last layer, match target_h/target_w
             next_h = target_h if is_last else (h + stride - 1) // stride
             padding = calculate_padding(h, next_h, kernel_size, stride)
+            self.layers.append(nn.Conv2d(c, c, 3, stride=1, padding=1))
             self.layers.append(
                 nn.Conv2d(c, out_ch, kernel_size, stride=stride, padding=padding)
             )
@@ -108,6 +109,7 @@ class downsample_sequence(nn.Module):
             h = calculate_output_size(h, kernel_size, stride, padding)
             w = calculate_output_size(w, kernel_size, stride, padding)
         self.final_shape = (c, h, w)
+        self.layers.append(self_attention(c, num_heads=8))
         self.flatten = nn.Flatten()
         assert c * h * w == out_flattened_size, (
             f"Final output shape {c}x{h}x{w} does not match requested flattened size {out_flattened_size}"
@@ -197,6 +199,7 @@ class upsample_sequence(nn.Module):
             out_ch = next_ch
             # output_padding must be int, not tuple
             output_padding = 0
+            self.layers.append(nn.Conv2d(c, c, 3, stride=1, padding=1))
             self.layers.append(
                 nn.ConvTranspose2d(
                     c,
@@ -227,6 +230,63 @@ class upsample_sequence(nn.Module):
         return x
 
 
+class self_attention(nn.Module):
+    def __init__(self, in_channels, num_heads=8):
+        """
+        Convolutional self-attention layer.
+
+        Args:
+            in_channels (int): Number of input channels.
+            num_heads (int): Number of attention heads (default: 8).
+        """
+        super(self_attention, self).__init__()
+        self.num_heads = num_heads
+        self.head_dim = in_channels // num_heads
+        assert in_channels % num_heads == 0, (
+            "in_channels must be divisible by num_heads"
+        )
+
+        self.query_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.out_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+
+    def forward(self, x):
+        batch_size, channels, height, width = x.size()
+        # Compute query, key, value
+        query = self.query_conv(x).view(
+            batch_size, self.num_heads, self.head_dim, height * width
+        )
+        key = self.key_conv(x).view(
+            batch_size, self.num_heads, self.head_dim, height * width
+        )
+        value = self.value_conv(x).view(
+            batch_size, self.num_heads, self.head_dim, height * width
+        )
+
+        # Transpose to get (batch_size, num_heads, height * width, head_dim)
+        query = query.permute(0, 1, 3, 2)
+        key = key.permute(0, 1, 3, 2)
+        value = value.permute(0, 1, 3, 2)
+        # Compute attention scores
+        attention_scores = torch.matmul(query, key.transpose(-2, -1)) / (
+            self.head_dim**0.5
+        )
+        attention_weights = torch.softmax(attention_scores, dim=-1)
+
+        # Apply attention weights to value
+        out = torch.matmul(attention_weights, value)
+        out = (
+            out.permute(0, 1, 3, 2)
+            .contiguous()
+            .view(batch_size, channels, height, width)
+        )
+
+        # Final convolution to combine heads
+        out = self.out_conv(out)
+        return out
+
+
 if __name__ == "__main__":
     # Example usage
     in_shape = (4, 32, 32)  # C, H, W
@@ -254,3 +314,8 @@ if __name__ == "__main__":
     x = torch.randn(1, 4096)  # Batch size of 1, matching downsample output
     upoutput = upmodel(x)
     print("Upsample output shape:", upoutput.shape)
+
+    attention = self_attention(in_channels=256, num_heads=8)
+    x_att = torch.randn(1, 256, 16, 16)
+    att_output = attention(x_att)
+    print("Attention output shape:", att_output.shape)

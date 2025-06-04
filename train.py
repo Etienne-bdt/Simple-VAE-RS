@@ -29,7 +29,9 @@ def main(args):
     os.makedirs(results_dir, exist_ok=True)
 
     callbacks_list = [
-        callbacks.ModelCheckpoint(slurm_job_id, "ckpt", monitor="val_loss", mode="min"),
+        callbacks.ModelCheckpoint(
+            slurm_job_id, "ckpt", monitor="Loss/val_loss", mode="min"
+        ),
         callbacks.EarlyStopping(patience=25, delta=0.01),
     ]
     if args.model_type == "VAE":
@@ -54,16 +56,12 @@ def main(args):
         model.load_state_dict(save_dict["model_state_dict"])
         print("Model loaded successfully.")
         print("Loading optimizer state...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
         start_epoch = 1
-
-    # Lower learning rate for the conditional part
-    for param_group in optimizer.param_groups:
-        param_group["lr"] = 1e-3
 
     if not (args.test and args.model_ckpt):
         model.fit(
