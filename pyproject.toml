@@ -15,7 +15,7 @@ dependencies = [
     "scikit-image>=0.25.2",
     "tensorboard>=2.19.0",
     "tifffile>=2025.5.21",
-    "torch==2.6.0",
+    "torch==2.7.1",
     "tqdm>=4.67.1",
     "wandb>=0.19.11",
 ]
