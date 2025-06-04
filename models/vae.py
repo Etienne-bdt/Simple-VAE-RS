@@ -32,11 +32,11 @@ class VAE(BaseVAE):
         self.encoder = downsample_sequence(
             in_shape=(4, patch_size, patch_size),
             out_flattened_size=latent_size * 2,
-            out_channels=256,
+            out_channels=400,
             num_steps=5,
         )
         self.decoder = upsample_sequence(
-            in_channels=128,
+            in_channels=200,
             in_flattened_size=latent_size,
             out_shape=(4, patch_size, patch_size),
             num_steps=5,

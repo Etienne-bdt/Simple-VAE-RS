@@ -13,7 +13,7 @@ from .layers import downsample_sequence, upsample_sequence
 
 
 class Cond_SRVAE(BaseVAE):
-    def __init__(self, latent_size, patch_size=64, lr_ckpt="", callbacks=None):
+    def __init__(self, latent_size, patch_size=64, callbacks=None):
         if callbacks is None:
             callbacks = []
         super(Cond_SRVAE, self).__init__(patch_size, callbacks)
@@ -23,28 +23,19 @@ class Cond_SRVAE(BaseVAE):
         self.gammax = torch.tensor(1.0, requires_grad=True)
         self.gammay = torch.tensor(1.0, requires_grad=True)
 
-        if lr_ckpt:
-            model = torch.load(lr_ckpt)
-            self.gammay = model["gamma"]
-            self.encoder_y = model["encoder_y"]
-            self.decoder_y = model["decoder_y"]
-            self.encoder_y.requires_grad = False
-            self.decoder_y.requires_grad = False
-            self.gammay.requires_grad = False
-        else:
-            self.encoder_y = downsample_sequence(
-                in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
-                out_flattened_size=self.latent_size_y * 2,
-                out_channels=256,
-                num_steps=5,
-            )
+        self.encoder_y = downsample_sequence(
+            in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
+            out_flattened_size=self.latent_size_y * 2,
+            out_channels=256,
+            num_steps=10,
+        )
 
-            self.decoder_y = upsample_sequence(
-                in_flattened_size=(self.latent_size_y),
-                out_shape=(4, patch_size / 2, patch_size / 2),
-                in_channels=128,
-                num_steps=5,
-            )
+        self.decoder_y = upsample_sequence(
+            in_flattened_size=(self.latent_size_y),
+            out_shape=(4, patch_size / 2, patch_size / 2),
+            num_steps=10,
+            in_channels=128,
+        )
 
         self.encoder_x = downsample_sequence(
             in_shape=(4, patch_size, patch_size),

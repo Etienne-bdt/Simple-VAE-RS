@@ -1,5 +1,6 @@
 import abc
 import os
+from difflib import get_close_matches
 
 import torch
 import torch.nn as nn
@@ -113,7 +114,21 @@ class ModelCheckpoint(Callback):
             logs (dict): Dictionary containing the metrics for the epoch.
         """
         logs = kwargs.get("logs", {})
+        epoch = kwargs.get("epoch", 0)
         model = kwargs.get("model", nn.Sequential())
+        if epoch == 1:
+            # find the closest match to monitor in logs
+            if self.monitor not in logs:
+                close_matches = get_close_matches(
+                    self.monitor, logs.keys(), n=1, cutoff=0
+                )[0]
+                if close_matches:
+                    self.monitor = close_matches
+                else:
+                    raise ValueError(
+                        f"Monitor metric '{self.monitor}' not found in logs. Available metrics: {list(logs.keys())}"
+                    )
+
         current_metric = logs.get(self.monitor, float("inf"))
         if self.save_best_only:
             if (self.mode == "min" and current_metric < self.best_metric) or (
@@ -130,6 +145,9 @@ class ModelCheckpoint(Callback):
             # Save the model every epoch
             torch.save(
                 model.state_dict(),
-                os.path.join(self.save_path, f"{self.slurm_job_id}_epoch_{kwargs.get('epoch', 0)}.pth"),
+                os.path.join(
+                    self.save_path,
+                    f"{self.slurm_job_id}_epoch_{kwargs.get('epoch', 0)}.pth",
+                ),
             )
         return False
