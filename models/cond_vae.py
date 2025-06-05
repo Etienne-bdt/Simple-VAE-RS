@@ -27,13 +27,13 @@ class Cond_SRVAE(BaseVAE):
             in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
             out_flattened_size=self.latent_size_y * 2,
             out_channels=256,
-            num_steps=10,
+            num_steps=5,
         )
 
         self.decoder_y = upsample_sequence(
             in_flattened_size=(self.latent_size_y),
             out_shape=(4, patch_size / 2, patch_size / 2),
-            num_steps=10,
+            num_steps=5,
             in_channels=128,
         )
 
@@ -41,21 +41,21 @@ class Cond_SRVAE(BaseVAE):
             in_shape=(4, patch_size, patch_size),
             out_flattened_size=self.latent_size * 2,
             out_channels=256,
-            num_steps=10,
+            num_steps=5,
         )
 
         self.decoder_x = upsample_sequence(
             in_channels=256,
             in_flattened_size=(self.latent_size * 2),
             out_shape=(4, patch_size, patch_size),
-            num_steps=10,
+            num_steps=5,
         )
 
         self.y_to_z = downsample_sequence(
             in_shape=(4, patch_size // 2, patch_size // 2),
             out_flattened_size=self.latent_size,
             out_channels=128,
-            num_steps=10,
+            num_steps=5,
         )
         # Replace Linear layers with Conv-based alternatives
         # u_to_z: expects input of shape (batch, latent_size_y)

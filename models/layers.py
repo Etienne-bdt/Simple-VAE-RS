@@ -103,13 +103,13 @@ class downsample_sequence(nn.Module):
             )
             # If not last layer, add ReLU activation
             if not is_last:
+                self.layers.append(self_attention(out_ch, num_heads=2))
                 self.layers.append(nn.BatchNorm2d(out_ch))
                 self.layers.append(nn.ReLU(inplace=True))
             c = out_ch
             h = calculate_output_size(h, kernel_size, stride, padding)
             w = calculate_output_size(w, kernel_size, stride, padding)
         self.final_shape = (c, h, w)
-        self.layers.append(self_attention(c, num_heads=8))
         self.flatten = nn.Flatten()
         assert c * h * w == out_flattened_size, (
             f"Final output shape {c}x{h}x{w} does not match requested flattened size {out_flattened_size}"
@@ -284,7 +284,22 @@ class self_attention(nn.Module):
 
         # Final convolution to combine heads
         out = self.out_conv(out)
-        return out
+        return out + x
+
+
+class residual(nn.Module):
+    def __init__(self, module):
+        """
+        Residual connection wrapper for a module.
+
+        Args:
+            module (nn.Module): The module to wrap with a residual connection.
+        """
+        super(residual, self).__init__()
+        self.module = module
+
+    def forward(self, x):
+        return x + self.module(x)
 
 
 if __name__ == "__main__":
