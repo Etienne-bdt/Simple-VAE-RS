@@ -5,7 +5,7 @@ import numpy as np
 import polars as pl
 import tifffile
 import torch
-from torch.utils.data import Dataset, default_collate
+from torch.utils.data import Dataset
 
 from utils import normalize_image
 
@@ -36,9 +36,6 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
         shuffle=True,
         num_workers=6,
         persistent_workers=True,
-        collate_fn=grid_collate
-        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid" and patch_size < 256
-        else default_collate,
     )
     val_loader = torch.utils.data.DataLoader(
         val_ds,
@@ -46,9 +43,6 @@ def init_dataloader(dataset: str, batch_size: int = 16, patch_size: int = 256):
         shuffle=False,
         num_workers=6,
         persistent_workers=True,
-        collate_fn=grid_collate
-        if isinstance(ds, Sen2VenDataset) and ds.crop == "grid" and patch_size < 256
-        else default_collate,
     )
     return train_loader, val_loader
 
@@ -125,6 +119,9 @@ class Sen2VenDataset(Dataset):
                 "Only 'visu' bands are implemented. Please choose 'visu'."
             )
 
+        if crop == "grid":
+            self.prepare_patches()
+
         assert patch_size <= 256, "Patch size must be less than or equal to 256"
         if patch_size < 256 and patch_size > 0 and patch_size % 2 == 0:
             # TODO: implement random cropping
@@ -135,35 +132,63 @@ class Sen2VenDataset(Dataset):
             raise ValueError("Patch size must be a positive even number")
 
     def __len__(self):
-        return len(self.df)
+        if self.crop == "grid":
+            return len(self.patches)
+        else:
+            return len(self.df)
 
     def __getitem__(self, idx):
-        item_path = self.df[idx]
-        p1 = item_path[self.p0].to_numpy()[0]
-        p2 = item_path[self.p1].to_numpy()[0]
+        if self.crop == "grid":
+            item_path = self.patches[idx][0]
+            patch_idx = self.patches[idx][1]
+            p1 = item_path[self.p0].to_numpy()[0]
+            p2 = item_path[self.p1].to_numpy()[0]
 
-        p1 = os.path.join(self.dataset, p1)
-        p2 = os.path.join(self.dataset, p2)
+            p1 = os.path.join(self.dataset, p1)
+            p2 = os.path.join(self.dataset, p2)
 
-        # Load the images using rasterio
-        img1 = tifffile.imread(p1)
-        img2 = tifffile.imread(p2)
+            # Load the images using rasterio
+            img1 = tifffile.imread(p1)
+            img2 = tifffile.imread(p2)
 
-        img1 = torch.tensor(img1, dtype=torch.float32)
-        img2 = torch.tensor(img2, dtype=torch.float32)
+            img1 = torch.tensor(img1, dtype=torch.float32)
+            img2 = torch.tensor(img2, dtype=torch.float32)
 
-        if self.transform:
-            if self.crop == "random":
-                img1, img2 = self.sr_randomcrop(img1, img2)
-            elif self.crop == "grid":
-                img1 = self.grid_crop(img1, self.patch_size // 2)
-                img2 = self.grid_crop(img2, self.patch_size)
+            (img1, img2) = (
+                normalize_image(
+                    self.select_crop(img1, self.patch_size // 2, patch_idx)
+                ),
+                normalize_image(self.select_crop(img2, self.patch_size, patch_idx)),
+            )
+            return img1, img2
 
-        # Normalize the images
-        img1 = normalize_image(img1)
-        img2 = normalize_image(img2)
+        else:
+            item_path = self.df[idx]
+            p1 = item_path[self.p0].to_numpy()[0]
+            p2 = item_path[self.p1].to_numpy()[0]
 
-        return img1, img2
+            p1 = os.path.join(self.dataset, p1)
+            p2 = os.path.join(self.dataset, p2)
+
+            # Load the images using rasterio
+            img1 = tifffile.imread(p1)
+            img2 = tifffile.imread(p2)
+
+            img1 = torch.tensor(img1, dtype=torch.float32)
+            img2 = torch.tensor(img2, dtype=torch.float32)
+
+            if self.transform:
+                if self.crop == "random":
+                    img1, img2 = self.sr_randomcrop(img1, img2)
+                elif self.crop == "grid":
+                    img1 = self.grid_crop(img1, self.patch_size // 2)
+                    img2 = self.grid_crop(img2, self.patch_size)
+
+            # Normalize the images
+            img1 = normalize_image(img1)
+            img2 = normalize_image(img2)
+
+            return img1, img2
 
     def sr_randomcrop(self, img1, img2):
         """
@@ -186,6 +211,16 @@ class Sen2VenDataset(Dataset):
         ]
         return img1, img2
 
+    def select_crop(self, img, patch_size, index):
+        num_patches = img.shape[2] // patch_size
+        # With square images, the number of patches is the same in both dimensions
+        row, col = index // num_patches, index % num_patches
+        return img[
+            :,
+            row * patch_size : (row + 1) * patch_size,
+            col * patch_size : (col + 1) * patch_size,
+        ]
+
     def grid_crop(self, img, patch_size):
         """
         Crop the image into a grid of patches of the specified patch size.
@@ -204,6 +239,21 @@ class Sen2VenDataset(Dataset):
                     patch = img[:, row : row + patch_size, col : col + patch_size]
                     patches.append(patch)
         return torch.stack(patches, dim=0)
+
+    def prepare_patches(self):
+        df = self.df
+        item_path = df[0]
+        p2 = item_path[self.p1].to_numpy()[0]
+
+        p2 = os.path.join(self.dataset, p2)
+
+        img2 = tifffile.imread(p2)
+        img2_x = img2.shape[1]
+        num_patches = (img2_x // self.patch_size) ** 2
+
+        self.patches = []
+        for i in range(len(df)):
+            self.patches.extend((df[i], j) for j in range(num_patches))
 
 
 def grid_collate(batch):
