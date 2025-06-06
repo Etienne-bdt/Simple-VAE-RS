@@ -20,24 +20,23 @@ class VAE(BaseVAE):
         callbacks (list, optional): List of callbacks to use during training (default: None).
     """
 
-    def __init__(self, latent_size, patch_size=64, callbacks=None):
+    def __init__(self, cr, patch_size=64, callbacks=None):
         if callbacks is None:
             callbacks = []
         super(VAE, self).__init__(patch_size, callbacks)
-        self.latent_size = latent_size
+        self.cr = cr
+        self.latent_size = int(patch_size * patch_size * 4 // self.cr)
         self.patch_size = patch_size
 
         self.gamma = torch.tensor(1.0, requires_grad=True)
 
         self.encoder = downsample_sequence(
             in_shape=(4, patch_size, patch_size),
-            out_flattened_size=latent_size * 2,
-            out_channels=400,
+            compression_ratio=self.cr,
             num_steps=5,
         )
         self.decoder = upsample_sequence(
-            in_channels=200,
-            in_flattened_size=latent_size,
+            in_flattened_size=self.latent_size,
             out_shape=(4, patch_size, patch_size),
             num_steps=5,
         )

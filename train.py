@@ -19,13 +19,13 @@ def main(args):
     train_loader, val_loader = init_dataloader(
         args.dataset, args.batch_size, args.patch_size
     )
-    latent_size = args.latent_size
-    if latent_size <= 0:
-        raise ValueError("Latent size must be a positive integer.")
+    cr = args.compression_ratio
+    if cr <= 0:
+        raise ValueError("Compression ratio must be a positive integer.")
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
-    results_dir = os.path.join("results", str(latent_size), slurm_job_id)
+    results_dir = os.path.join("results", slurm_job_id)
     os.makedirs(results_dir, exist_ok=True)
 
     callbacks_list = [
@@ -35,11 +35,9 @@ def main(args):
         callbacks.EarlyStopping(patience=25, delta=0.01),
     ]
     if args.model_type == "VAE":
-        model = models.VAE(latent_size, args.patch_size // 2, callbacks=callbacks_list)
+        model = models.VAE(cr, args.patch_size // 2, callbacks=callbacks_list)
     elif args.model_type == "Cond_SRVAE":
-        model = models.Cond_SRVAE(
-            latent_size, args.patch_size, callbacks=callbacks_list
-        )
+        model = models.Cond_SRVAE(cr, args.patch_size, callbacks=callbacks_list)
 
     else:
         raise ValueError(
@@ -60,7 +58,7 @@ def main(args):
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
         start_epoch = 1
 
     if not (args.test and args.model_ckpt):
@@ -129,7 +127,11 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-l", "--latent_size", type=int, default=10000, help="Size of the latent space."
+        "-cr",
+        "--compression_ratio",
+        type=float,
+        default=1.5,
+        help="Compression of the ratio.",
     )
     parser.add_argument(
         "--model_type",
