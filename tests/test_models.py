@@ -5,8 +5,8 @@ from models import VAE, Cond_SRVAE
 
 
 def test_vae_forward_and_loss_shapes():
-    cr = 5
-    patch_size = 8
+    cr = 2
+    patch_size = 16
     latent_size = int(4 * patch_size * patch_size // cr)
     # Initialize the VAE model with the calculated latent size
     model = VAE(cr, patch_size=patch_size)
@@ -21,8 +21,8 @@ def test_vae_forward_and_loss_shapes():
 
 
 def test_cond_vae_forward_and_loss_shapes():
-    cr = 5
-    patch_size = 8
+    cr = 2
+    patch_size = 16
     latent_size = int(4 * patch_size * patch_size // cr)
     model = Cond_SRVAE(cr, patch_size=patch_size)
     x = torch.randn(2, 4, patch_size, patch_size)

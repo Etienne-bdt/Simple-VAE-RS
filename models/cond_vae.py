@@ -26,7 +26,7 @@ class Cond_SRVAE(BaseVAE):
 
         self.encoder_y = downsample_sequence(
             in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
-            compression_ratio=self.cr,
+            compression_ratio=self.cr / 2,
         )
 
         self.decoder_y = upsample_sequence(
@@ -36,7 +36,7 @@ class Cond_SRVAE(BaseVAE):
 
         self.encoder_x = downsample_sequence(
             in_shape=(4, patch_size, patch_size),
-            compression_ratio=self.cr,
+            compression_ratio=self.cr / 2,
         )
 
         self.decoder_x = upsample_sequence(
@@ -46,7 +46,7 @@ class Cond_SRVAE(BaseVAE):
 
         self.y_to_z = downsample_sequence(
             in_shape=(4, patch_size // 2, patch_size // 2),
-            compression_ratio=self.cr,
+            compression_ratio=self.cr / 2,
         )
         # Replace Linear layers with Conv-based alternatives
         # u_to_z: expects input of shape (batch, latent_size_y)
