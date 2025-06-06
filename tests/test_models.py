@@ -5,9 +5,12 @@ from models import VAE, Cond_SRVAE
 
 
 def test_vae_forward_and_loss_shapes():
-    latent_size = 128
-    model = VAE(latent_size=latent_size, patch_size=8)
-    x = torch.randn(2, 4, 8, 8)
+    cr = 2
+    patch_size = 16
+    latent_size = int(4 * patch_size * patch_size // cr)
+    # Initialize the VAE model with the calculated latent size
+    model = VAE(cr, patch_size=patch_size)
+    x = torch.randn(2, 4, patch_size, patch_size)
     x_hat, mu, logvar = model(x)
     assert x_hat.shape == x.shape
     assert mu.shape == (2, latent_size)
@@ -18,9 +21,10 @@ def test_vae_forward_and_loss_shapes():
 
 
 def test_cond_vae_forward_and_loss_shapes():
-    latent_size = 128 * 4
-    patch_size = 8
-    model = Cond_SRVAE(latent_size=latent_size, patch_size=patch_size)
+    cr = 2
+    patch_size = 16
+    latent_size = int(4 * patch_size * patch_size // cr)
+    model = Cond_SRVAE(cr, patch_size=patch_size)
     x = torch.randn(2, 4, patch_size, patch_size)
     y = torch.randn(2, 4, patch_size // 2, patch_size // 2)
     x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy = model(x, y)

@@ -24,10 +24,12 @@ def dummy_wandb(monkeypatch):
 
 
 def test_vae_training_loop_runs_one_epoch():
-    x_data = torch.randn(2, 4, 32, 32)
+    cr = 2
+    patch_size = 32
+    x_data = torch.randn(2, 4, patch_size, patch_size)
     ds = TensorDataset(x_data, x_data)
     loader = DataLoader(ds, batch_size=2)
-    model = VAE(latent_size=128, patch_size=32)
+    model = VAE(cr=cr, patch_size=patch_size)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     # should finish without error
     model.fit(
@@ -44,11 +46,14 @@ def test_vae_training_loop_runs_one_epoch():
 
 
 def test_cond_vae_training_loop_runs_one_epoch():
-    x_data = torch.randn(2, 4, 64, 64)
-    y_data = torch.randn(2, 4, 32, 32)
+    cr = 2
+    patch_size = 64
+    # Initialize the Cond_SRVAE model with the calculated latent size
+    x_data = torch.randn(2, 4, patch_size, patch_size)
+    y_data = torch.randn(2, 4, patch_size // 2, patch_size // 2)
     ds = TensorDataset(y_data, x_data)
     loader = DataLoader(ds, batch_size=2)
-    model = Cond_SRVAE(latent_size=128 * 4, patch_size=64)
+    model = Cond_SRVAE(cr, patch_size=patch_size)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.fit(
         train_loader=loader,

@@ -13,49 +13,40 @@ from .layers import downsample_sequence, upsample_sequence
 
 
 class Cond_SRVAE(BaseVAE):
-    def __init__(self, latent_size, patch_size=64, callbacks=None):
+    def __init__(self, cr, patch_size=64, callbacks=None):
         if callbacks is None:
             callbacks = []
         super(Cond_SRVAE, self).__init__(patch_size, callbacks)
-        self.latent_size = latent_size
-        self.latent_size_y = latent_size // 4
+        self.cr = cr
+        self.latent_size = int(patch_size * patch_size * 4 // self.cr)
+        self.latent_size_y = int(self.latent_size // 4)
         self.patch_size = patch_size
         self.gammax = torch.tensor(1.0, requires_grad=True)
         self.gammay = torch.tensor(1.0, requires_grad=True)
 
         self.encoder_y = downsample_sequence(
             in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
-            out_flattened_size=self.latent_size_y * 2,
-            out_channels=256,
-            num_steps=5,
+            compression_ratio=self.cr / 2,
         )
 
         self.decoder_y = upsample_sequence(
             in_flattened_size=(self.latent_size_y),
             out_shape=(4, patch_size / 2, patch_size / 2),
-            num_steps=5,
-            in_channels=128,
         )
 
         self.encoder_x = downsample_sequence(
             in_shape=(4, patch_size, patch_size),
-            out_flattened_size=self.latent_size * 2,
-            out_channels=256,
-            num_steps=5,
+            compression_ratio=self.cr / 2,
         )
 
         self.decoder_x = upsample_sequence(
-            in_channels=256,
             in_flattened_size=(self.latent_size * 2),
             out_shape=(4, patch_size, patch_size),
-            num_steps=5,
         )
 
         self.y_to_z = downsample_sequence(
             in_shape=(4, patch_size // 2, patch_size // 2),
-            out_flattened_size=self.latent_size,
-            out_channels=128,
-            num_steps=5,
+            compression_ratio=self.cr / 4,
         )
         # Replace Linear layers with Conv-based alternatives
         # u_to_z: expects input of shape (batch, latent_size_y)
@@ -426,7 +417,7 @@ class Cond_SRVAE(BaseVAE):
 
 if __name__ == "__main__":
     # Example usage
-    model = Cond_SRVAE(latent_size=2048, patch_size=64)
+    model = Cond_SRVAE(cr=1.5, patch_size=64)
     print(model)
     x = torch.randn(1, 4, 64, 64)
     y = torch.randn(1, 4, 32, 32)  # Example condition
