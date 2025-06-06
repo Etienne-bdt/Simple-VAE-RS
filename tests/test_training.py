@@ -24,8 +24,8 @@ def dummy_wandb(monkeypatch):
 
 
 def test_vae_training_loop_runs_one_epoch():
-    cr = 5
-    patch_size = 8
+    cr = 2
+    patch_size = 16
     x_data = torch.randn(2, 4, patch_size, patch_size)
     ds = TensorDataset(x_data, x_data)
     loader = DataLoader(ds, batch_size=2)
@@ -46,8 +46,8 @@ def test_vae_training_loop_runs_one_epoch():
 
 
 def test_cond_vae_training_loop_runs_one_epoch():
-    cr = 5
-    patch_size = 8
+    cr = 2
+    patch_size = 32
     # Initialize the Cond_SRVAE model with the calculated latent size
     x_data = torch.randn(2, 4, patch_size, patch_size)
     y_data = torch.randn(2, 4, patch_size // 2, patch_size // 2)
