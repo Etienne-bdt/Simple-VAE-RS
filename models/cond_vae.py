@@ -46,7 +46,7 @@ class Cond_SRVAE(BaseVAE):
 
         self.y_to_z = downsample_sequence(
             in_shape=(4, patch_size // 2, patch_size // 2),
-            compression_ratio=self.cr / 2,
+            compression_ratio=self.cr / 4,
         )
         # Replace Linear layers with Conv-based alternatives
         # u_to_z: expects input of shape (batch, latent_size_y)
