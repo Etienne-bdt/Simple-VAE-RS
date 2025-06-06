@@ -328,6 +328,20 @@ class Cond_SRVAE(BaseVAE):
                 "x_sr": x_sr[:4],
             }
 
+        if epoch == 1:
+            # log sample images for the first epoch
+            wandb_run.log(
+                {
+                    "Images/LR_Input": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in y[:4]
+                    ],
+                    "Images/HR_Input": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in x[:4]
+                    ],
+                },
+                step=epoch,
+            )
+
         # log sample images
         wandb_run.log(
             {
