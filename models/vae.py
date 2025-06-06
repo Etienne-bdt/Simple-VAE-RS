@@ -32,7 +32,7 @@ class VAE(BaseVAE):
 
         self.encoder = downsample_sequence(
             in_shape=(4, patch_size, patch_size),
-            compression_ratio=self.cr,
+            compression_ratio=self.cr / 2,
             num_steps=5,
         )
         self.decoder = upsample_sequence(

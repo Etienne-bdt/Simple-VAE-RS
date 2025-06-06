@@ -32,7 +32,9 @@ class downsample_sequence(nn.Module):
             num_steps: number of downsampling steps (optional, will be inferred if not given)
         """
         super(downsample_sequence, self).__init__()
-        out_flattened_size = int(math.prod(in_shape) // compression_ratio)
+        out_flattened_size = int(math.prod(in_shape) // (compression_ratio * 2)) * 2
+        if out_flattened_size % 2 != 0:
+            out_flattened_size += 1
         assert out_flattened_size is not None, "Must specify out_flattened_size"
         # Auto-calculate out_channels and H=W if not provided
 
@@ -294,23 +296,22 @@ if __name__ == "__main__":
     compression_ratio = 1.5
     model = downsample_sequence(
         in_shape,
-        compression_ratio,
-        num_steps=5,
+        compression_ratio / 2,
     )
+    latent_size = int(math.prod(in_shape) // compression_ratio)
+
     print(model)
 
     # Test with a random input tensor
     x = torch.randn(1, *in_shape)  # Batch size of 1
     output = model(x)
+    output, o = torch.chunk(output, 2, dim=1)
     print("Output shape:", output.shape)
 
     # Example usage for upsample_sequence
     upmodel = upsample_sequence(
-        in_flattened_size=int(
-            math.prod(in_shape) // compression_ratio
-        ),  # Adjusted for compression ratio
+        in_flattened_size=latent_size,
         out_shape=(4, 32, 32),
-        num_steps=5,
     )
     print(upmodel)
 

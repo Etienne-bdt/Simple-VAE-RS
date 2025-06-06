@@ -18,8 +18,8 @@ class Cond_SRVAE(BaseVAE):
             callbacks = []
         super(Cond_SRVAE, self).__init__(patch_size, callbacks)
         self.cr = cr
-        self.latent_size = int(4 * patch_size * patch_size // cr)
-        self.latent_size_y = int(patch_size * patch_size // cr)
+        self.latent_size = int(patch_size * patch_size * 4 // self.cr)
+        self.latent_size_y = int(self.latent_size // 4)
         self.patch_size = patch_size
         self.gammax = torch.tensor(1.0, requires_grad=True)
         self.gammay = torch.tensor(1.0, requires_grad=True)
