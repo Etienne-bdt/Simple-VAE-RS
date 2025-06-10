@@ -100,6 +100,10 @@ class downsample_sequence(nn.Module):
             h = calculate_output_size(h, kernel_size, stride, padding)
             w = calculate_output_size(w, kernel_size, stride, padding)
         self.final_shape = (c, h, w)
+        if h > 1:
+            # If spatial dimensions are still larger than 1x1, apply adaptive pooling
+            self.layers.append(nn.AdaptiveAvgPool2d((1, 1)))
+            h, w = 1, 1
         self.flatten = nn.Flatten()
         assert c * h * w == out_flattened_size, (
             f"Final output shape {c}x{h}x{w} does not match requested flattened size {out_flattened_size}"
@@ -144,28 +148,25 @@ class upsample_sequence(nn.Module):
         self.in_w = in_w
         c, h, w = in_channels, in_h, in_w
         # If num_steps not given, compute minimal steps to reach target spatial size
-        steps = num_steps or 0
-        if num_steps is None:
-            tmp_h, tmp_w = h, w
-            while tmp_h < target_h and tmp_w < target_w:
+        steps = 0
+        tmp_h, tmp_w = h, w
+        while tmp_h < target_h and tmp_w < target_w:
+            tmp_h = tmp_h * 2
+            tmp_w = tmp_w * 2
+            steps += 1
+        if num_steps is not None and steps < num_steps:
+            steps = num_steps
+
+        max_stride_steps = 0
+        tmp_h, tmp_w = h, w
+        for _ in range(steps):
+            if tmp_h < target_h and tmp_w < target_w:
                 tmp_h = tmp_h * 2
                 tmp_w = tmp_w * 2
-                steps += 1
-        else:
-            steps = num_steps
-        if steps > 0:
-            max_stride_steps = 0
-            tmp_h, tmp_w = h, w
-            for _ in range(steps):
-                if tmp_h < target_h and tmp_w < target_w:
-                    tmp_h = tmp_h * 2
-                    tmp_w = tmp_w * 2
-                    max_stride_steps += 1
-                else:
-                    break
-            stride_plan = [2] * max_stride_steps + [1] * (steps - max_stride_steps)
-        else:
-            stride_plan = []
+                max_stride_steps += 1
+            else:
+                break
+        stride_plan = [2] * max_stride_steps + [1] * (steps - max_stride_steps)
         if steps > 1:
             ch_progression = [max(out_channels, c // (4**i)) for i in range(steps)]
             ch_progression[-1] = out_channels  # Ensure last is exactly out_channels
