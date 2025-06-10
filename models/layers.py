@@ -32,7 +32,7 @@ class downsample_sequence(nn.Module):
             num_steps: number of downsampling steps (optional, will be inferred if not given)
         """
         super(downsample_sequence, self).__init__()
-        out_flattened_size = int(math.prod(in_shape) // (compression_ratio * 2)) * 2
+        out_flattened_size = int(math.prod(in_shape) / compression_ratio)
         if out_flattened_size % 2 != 0:
             out_flattened_size += 1
         assert out_flattened_size is not None, "Must specify out_flattened_size"
