@@ -13,10 +13,10 @@ from .layers import downsample_sequence, upsample_sequence
 
 
 class Cond_SRVAE(BaseVAE):
-    def __init__(self, cr, patch_size=64, callbacks=None):
+    def __init__(self, cr, patch_size=64, callbacks=None, slurm_job_id="local"):
         if callbacks is None:
             callbacks = []
-        super(Cond_SRVAE, self).__init__(patch_size, callbacks)
+        super(Cond_SRVAE, self).__init__(patch_size, callbacks, slurm_job_id)
         self.cr = cr
         self.latent_size = int(patch_size * patch_size * 4 // self.cr)
         self.latent_size_y = int(self.latent_size // 4)
@@ -55,28 +55,26 @@ class Cond_SRVAE(BaseVAE):
             nn.Unflatten(1, (self.latent_size_y, 1, 1)),
             nn.Conv2d(self.latent_size_y, self.latent_size_y * 2, kernel_size=1),
             nn.Conv2d(self.latent_size_y * 2, self.latent_size, kernel_size=1),
-            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
             nn.Flatten(1),
         )
         # mu_u_y_to_z and logvar_u_y_to_z: input is (batch, latent_size*2)
         # We'll reshape to (batch, latent_size*2, 1, 1) and use 1x1 Conv
         self.mu_u_y_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
+            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
             nn.Flatten(1),
         )
         self.logvar_u_y_to_z = nn.Sequential(
             nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
             nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
+            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
             nn.Flatten(1),
             nn.Hardtanh(-7, 7),
         )
 
         self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Cond_SRVAE initialized with {self.num_params} trainable parameters.")
 
     def z_cond(self, y, u):
         # Define the encoder part of the VAE
@@ -427,6 +425,17 @@ class Cond_SRVAE(BaseVAE):
             },
             step=self.current_epoch,
         )
+
+    def get_task_data(self, val_loader):
+        batch = next(iter(val_loader))
+        y, x = batch
+        y, x = (
+            y.to(next(self.parameters()).device),
+            x.to(next(self.parameters()).device),
+        )
+        return y[0:1, :, :, :], x[
+            0:1, :, :, :
+        ]  # Return a single sample for task evaluation
 
 
 if __name__ == "__main__":

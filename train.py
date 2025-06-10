@@ -7,7 +7,6 @@ import torch
 import callbacks
 import models
 from dataset import init_dataloader
-from task import sr_task
 
 
 def main(args):
@@ -35,9 +34,16 @@ def main(args):
         callbacks.EarlyStopping(patience=25, delta=0.01),
     ]
     if args.model_type == "VAE":
-        model = models.VAE(cr, args.patch_size // 2, callbacks=callbacks_list)
+        model = models.VAE(
+            cr,
+            args.patch_size // 2,
+            callbacks=callbacks_list,
+            slurm_job_id=slurm_job_id,
+        )
     elif args.model_type == "Cond_SRVAE":
-        model = models.Cond_SRVAE(cr, args.patch_size, callbacks=callbacks_list)
+        model = models.Cond_SRVAE(
+            cr, args.patch_size, callbacks=callbacks_list, slurm_job_id=slurm_job_id
+        )
 
     else:
         raise ValueError(
@@ -54,11 +60,11 @@ def main(args):
         model.load_state_dict(save_dict["model_state_dict"])
         print("Model loaded successfully.")
         print("Loading optimizer state...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
         start_epoch = 1
 
     if not (args.test and args.model_ckpt):
@@ -73,7 +79,7 @@ def main(args):
             slurm_job_id=slurm_job_id,
         )
 
-    sr_task(device, model, val_loader)
+    model.task(val_loader)
 
 
 def parse_args():
