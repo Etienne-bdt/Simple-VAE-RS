@@ -81,6 +81,8 @@ class Cond_SRVAE(BaseVAE):
 
         self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+        print(f"Cond_SRVAE initialized with {self.num_params} trainable parameters.")
+
     def z_cond(self, y, u):
         # Define the encoder part of the VAE
         y = self.y_to_z(y)
