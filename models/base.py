@@ -1,4 +1,5 @@
 import abc
+import os
 from math import isnan
 from typing import List
 
@@ -295,6 +296,10 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             batch: data batch
             device: device to use
         """
+
+        results_dir = os.path.join("results", f"{self.slurm_job_id}_CRx{self.cr}")
+        os.makedirs(results_dir, exist_ok=True)
+
         pred, target = self.get_task_data(val_loader)
         with torch.no_grad():
             samples = self.sample(pred, samples=1000)
@@ -336,9 +341,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         plt.imshow(mean_bias, cmap="hot")
         plt.colorbar()
         plt.title(f"Mean Bias Map, Mean: {mean_bias.mean():.2f}")
-        plt.savefig(
-            f"results/{self.slurm_job_id}/error_mean_std_maps.png", bbox_inches="tight"
-        )
+        plt.savefig(f"{results_dir}/error_mean_std_maps.png", bbox_inches="tight")
         plt.close()
         MMSE = (samples - target).pow(2).mean()
         print(f"MMSE: {MMSE:.4f}")

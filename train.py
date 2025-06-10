@@ -24,9 +24,6 @@ def main(args):
     slurm_job_id = os.environ.get(
         "SLURM_JOB_ID", f"local_{time.strftime('%Y%m%D-%H%M%S')}"
     )
-    results_dir = os.path.join("results", f"{slurm_job_id}_CRx{cr}")
-    os.makedirs(results_dir, exist_ok=True)
-
     callbacks_list = [
         callbacks.ModelCheckpoint(
             slurm_job_id, "ckpt", monitor="Loss/val_loss", mode="min"
