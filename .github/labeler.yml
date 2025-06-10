@@ -1,0 +1,15 @@
+📃 Documentation:
+  - changed-files: 
+      - '**/*.md'
+
+🧠 Model:
+  - changed-files:
+      - 'models/**/*'
+
+💽 Data Pipeline: 
+  - changed-files:
+      - 'dataset.py'
+
+🖥️ Feature:
+  - head-branch: 
+      - '^feat.*'
