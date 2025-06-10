@@ -1,8 +1,10 @@
 import abc
+import os
 from math import isnan
 from typing import List
 
 import lpips
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import wandb
@@ -17,12 +19,18 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
     Base class for all VAEs. Defines the common interface for training and validation.
     """
 
-    def __init__(self, patch_size: int = 64, callbacks: List[Callback] | None = None):
+    def __init__(
+        self,
+        patch_size: int = 64,
+        callbacks: List[Callback] | None = None,
+        slurm_job_id: str = "local",
+    ):
         if callbacks is None:
             callbacks = []
         super().__init__()
         # Scheduler to reduce learning rate on plateau
         self.latent_size: int = 0
+        self.slurm_job_id: str = slurm_job_id
         self.patch_size: int = patch_size
         self.callbacks: List[Callback] = callbacks
         self.ssim = skmetrics.structural_similarity
@@ -254,3 +262,86 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
             kwargs: additional arguments
         """
         pass
+
+    @abc.abstractmethod
+    def sample(self, y, samples=1000):
+        """
+        Sample from the model given input y.
+        Args:
+            y: input data
+            samples: number of samples to generate
+        Returns:
+            samples: generated samples
+        """
+        raise NotImplementedError("sample must be implemented in the derived class.")
+
+    @abc.abstractmethod
+    def get_task_data(self, val_loader):
+        """
+        Get the data for the task.
+        Args:
+            val_loader: DataLoader for validation data
+        Returns:
+            pred: predicted data
+            target: target data
+        """
+        raise NotImplementedError(
+            "get_task_data must be implemented in the derived class."
+        )
+
+    def task(self, val_loader):
+        """
+        Performs a test step on a batch.
+        Args:
+            batch: data batch
+            device: device to use
+        """
+
+        results_dir = os.path.join("results", f"{self.slurm_job_id}_CRx{self.cr}")
+        os.makedirs(results_dir, exist_ok=True)
+
+        pred, target = self.get_task_data(val_loader)
+        with torch.no_grad():
+            samples = self.sample(pred, samples=1000)
+
+        # Compute error map of samples and GT x
+        diff = samples - target
+        mean = samples.mean(dim=0).cpu().numpy()
+        std = samples.std(dim=0).cpu().numpy().mean(axis=0)
+        mae = diff.abs().mean(dim=(0, 1)).cpu().numpy()
+        mse = (diff.pow(2)).mean(dim=(0, 1)).cpu().numpy()
+
+        plt.figure(figsize=(20, 10))
+        plt.subplot(2, 4, 1)
+        plt.imshow(target[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))
+        plt.title("Input Image")
+        plt.subplot(2, 4, 2)
+        plt.imshow(samples[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))
+        plt.title("Sampled Image")
+        plt.subplot(2, 4, 3)
+        plt.imshow(target[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))
+        plt.title("Ground Truth Image")
+        plt.subplot(2, 4, 4)
+        plt.imshow(mean[[2, 1, 0], :, :].transpose(1, 2, 0))
+        plt.title("Mean of Samples")
+        plt.subplot(2, 4, 5)
+        plt.imshow(mae, cmap="hot")
+        plt.colorbar()
+        plt.title("MAE Map")
+        plt.subplot(2, 4, 6)
+        plt.imshow(mse, cmap="hot")
+        plt.colorbar()
+        plt.title("MSE Map")
+        plt.subplot(2, 4, 7)
+        plt.imshow(std, cmap="hot")
+        plt.colorbar()
+        plt.title(f"Standard Deviation of Samples, Mean: {std.mean():.2f}")
+        plt.subplot(2, 4, 8)
+        mean_bias = (target - samples.mean(dim=0)).mean(dim=0).mean(dim=0).cpu().numpy()
+        plt.imshow(mean_bias, cmap="hot")
+        plt.colorbar()
+        plt.title(f"Mean Bias Map, Mean: {mean_bias.mean():.2f}")
+        plt.savefig(f"{results_dir}/error_mean_std_maps.png", bbox_inches="tight")
+        plt.close()
+        MMSE = (samples - target).pow(2).mean()
+        print(f"MMSE: {MMSE:.4f}")

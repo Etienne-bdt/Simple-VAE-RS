@@ -20,10 +20,10 @@ class VAE(BaseVAE):
         callbacks (list, optional): List of callbacks to use during training (default: None).
     """
 
-    def __init__(self, cr, patch_size=64, callbacks=None):
+    def __init__(self, cr, patch_size=64, callbacks=None, slurm_job_id="local"):
         if callbacks is None:
             callbacks = []
-        super(VAE, self).__init__(patch_size, callbacks)
+        super(VAE, self).__init__(patch_size, callbacks, slurm_job_id)
         self.cr = cr
         self.latent_size = int(patch_size * patch_size * 4 // self.cr)
         self.patch_size = patch_size
@@ -185,3 +185,24 @@ class VAE(BaseVAE):
     def on_train_start(self, **kwargs):
         self.gamma.requires_grad = True
         self.optimizer.add_param_group({"params": [self.gamma]})
+
+    def get_task_data(self, val_loader):
+        batch = next(iter(val_loader))
+        x, _ = batch
+        x = x.to(next(self.parameters()).device)
+        x = x[0:1, :, :, :]
+        return x, x
+
+    def sample(self, y, samples):
+        """
+        Generate samples from the VAE given a condition y.
+        Args:
+            y (torch.Tensor): Condition tensor of shape (batch_size, latent_size).
+            samples (int): Number of samples to generate.
+        Returns:
+            torch.Tensor: Generated samples of shape (num_samples, 4, patch_size, patch_size).
+        """
+        mu, logvar = self.encode(y)
+        z = torch.randn(samples, self.latent_size, device=y.device)
+        z = mu + torch.exp(0.5 * logvar) * z
+        return self.decode(z).view(samples, 4, self.patch_size, self.patch_size)
