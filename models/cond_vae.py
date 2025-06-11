@@ -13,10 +13,10 @@ from .layers import down_block, up_block
 
 
 class Cond_SRVAE(BaseVAE):
-    def __init__(self, cr, patch_size=64, callbacks=None):
+    def __init__(self, cr, patch_size=64, callbacks=None, slurm_job_id="local"):
         if callbacks is None:
             callbacks = []
-        super(Cond_SRVAE, self).__init__(patch_size, callbacks)
+        super(Cond_SRVAE, self).__init__(patch_size, callbacks, slurm_job_id)
         self.cr = cr
         self.latent_size = int((patch_size * patch_size * 4 / self.cr) // 16) * 16
         self.latent_size_y = self.latent_size // 4
@@ -510,6 +510,17 @@ class Cond_SRVAE(BaseVAE):
             },
             step=self.current_epoch,
         )
+
+    def get_task_data(self, val_loader):
+        batch = next(iter(val_loader))
+        y, x = batch
+        y, x = (
+            y.to(next(self.parameters()).device),
+            x.to(next(self.parameters()).device),
+        )
+        return y[0:1, :, :, :], x[
+            0:1, :, :, :
+        ]  # Return a single sample for task evaluation
 
 
 if __name__ == "__main__":
