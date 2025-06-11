@@ -1,10 +1,11 @@
 import torch
+import torch.nn as nn
 import wandb
 
 from loss import base_loss
 
 from .base import BaseVAE
-from .layers import downsample_sequence, upsample_sequence
+from .layers import down_block, up_block
 
 
 class VAE(BaseVAE):
@@ -25,20 +26,49 @@ class VAE(BaseVAE):
             callbacks = []
         super(VAE, self).__init__(patch_size, callbacks, slurm_job_id)
         self.cr = cr
-        self.latent_size = int(patch_size * patch_size * 4 // self.cr)
+        self.latent_size = (
+            int((patch_size * patch_size * 4 // self.cr) // 4) * 4
+        )  # Ensure latent size is a multiple of 4
         self.patch_size = patch_size
 
         self.gamma = torch.tensor(1.0, requires_grad=True)
 
-        self.encoder = downsample_sequence(
-            in_shape=(4, patch_size, patch_size),
-            compression_ratio=self.cr / 2,
-            num_steps=5,
+        self.encoder = nn.Sequential(
+            down_block(in_channels=4, out_channels=64),  # out 16 , 16 , 16
+            down_block(in_channels=64, out_channels=256),  # out 64, 8, 8
+            down_block(
+                in_channels=256,
+                out_channels=512,
+            ),  # out 512, 4, 4
+            down_block(
+                in_channels=512,
+                out_channels=self.latent_size // 2,
+                with_bn=False,
+                with_relu=False,
+            ),  # out 512, 2, 2,
+            nn.Flatten(1),
+            # out 512 * 2 * 2 = 2048
         )
-        self.decoder = upsample_sequence(
-            in_flattened_size=self.latent_size,
-            out_shape=(4, patch_size, patch_size),
-            num_steps=5,
+
+        self.decoder = nn.Sequential(
+            nn.Unflatten(1, (self.latent_size // 4, 2, 2)),
+            up_block(
+                in_channels=self.latent_size // 4,
+                out_channels=512,
+            ),
+            up_block(
+                in_channels=512,
+                out_channels=256,
+            ),
+            up_block(
+                in_channels=256,
+                out_channels=64,
+            ),
+            up_block(
+                in_channels=64,
+                out_channels=4,
+            ),
+            nn.Sigmoid(),  # Ensure output is in [0, 1]
         )
         # 4 output channels (same as input)
         self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -59,8 +89,12 @@ class VAE(BaseVAE):
 
     def forward(self, x):
         # Forward pass through the VAE
+        print("Input shape:", x.shape)
         mu, logvar = self.encode(x)
+        print("Mu shape:", mu.shape)
+        print("Logvar shape:", logvar.shape)
         z = self.reparameterize(mu, logvar)
+        print("Z shape:", z.shape)
         return self.decode(z), mu, logvar
 
     def train_step(self, batch, device):
@@ -206,3 +240,13 @@ class VAE(BaseVAE):
         z = torch.randn(samples, self.latent_size, device=y.device)
         z = mu + torch.exp(0.5 * logvar) * z
         return self.decode(z).view(samples, 4, self.patch_size, self.patch_size)
+
+
+if __name__ == "__main__":
+    model = VAE(cr=1.5, patch_size=64)
+    print(model)
+    y = torch.randn(1, 4, 32, 32)
+    y_hat, mu, logvar = model.forward(y)
+    print("Output shape:", y_hat.shape)
+    print("Mu shape:", mu.shape)
+    print("Logvar shape:", logvar.shape)
