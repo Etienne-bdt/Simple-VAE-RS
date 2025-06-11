@@ -89,12 +89,8 @@ class VAE(BaseVAE):
 
     def forward(self, x):
         # Forward pass through the VAE
-        print("Input shape:", x.shape)
         mu, logvar = self.encode(x)
-        print("Mu shape:", mu.shape)
-        print("Logvar shape:", logvar.shape)
         z = self.reparameterize(mu, logvar)
-        print("Z shape:", z.shape)
         return self.decode(z), mu, logvar
 
     def train_step(self, batch, device):
