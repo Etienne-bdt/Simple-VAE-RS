@@ -1,0 +1,15 @@
+📃 Documentation:
+  - changed-files: 
+    - any-glob-to-any-file: '**/*.md'
+
+🧠 Model:
+  - changed-files:
+    - any-glob-to-any-file: 'models/**/*'
+
+💽 Data Pipeline: 
+  - changed-files:
+    - any-glob-to-any-file: 'dataset.py'
+
+🖥️ Feature:
+  - head-branch: 
+    - any-glob-to-any-file: '^feat.*'
