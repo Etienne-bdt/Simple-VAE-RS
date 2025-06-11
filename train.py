@@ -62,11 +62,11 @@ def main(args):
         model.load_state_dict(save_dict["model_state_dict"])
         print("Model loaded successfully.")
         print("Loading optimizer state...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
         optimizer.load_state_dict(save_dict["optimizer_state_dict"])
         print("Optimizer state loaded successfully.")
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
         start_epoch = 1
 
     if not (args.test and args.model_ckpt):
