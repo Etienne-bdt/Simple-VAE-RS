@@ -101,7 +101,7 @@ class FloodDataset(Dataset):
 
 
 class Sen2VenDataset(Dataset):
-    def __init__(self, patch_size=256, crop="grid", dataset="ARM", bands="visu"):
+    def __init__(self, patch_size=256, crop="random", dataset="ARM", bands="visu"):
         super(Sen2VenDataset, self).__init__()
         self.dataset = os.path.join(os.getcwd(), dataset)
         csv_path = os.path.join(self.dataset, "index.csv")
@@ -209,6 +209,12 @@ class Sen2VenDataset(Dataset):
         img1 = img1[
             :, top : top + self.patch_size // 2, left : left + self.patch_size // 2
         ]
+        img2 = img2[
+            :,
+            2 * top : 2 * top + self.patch_size,
+            2 * left : 2 * left + self.patch_size,
+        ]
+
         return img1, img2
 
     def select_crop(self, img, patch_size, index):
