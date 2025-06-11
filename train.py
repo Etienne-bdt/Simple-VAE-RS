@@ -20,6 +20,11 @@ def main(args):
         args.dataset, args.batch_size, args.patch_size
     )
     cr = args.compression_ratio
+    estimated_latent = int(args.patch_size * args.patch_size * 4 / cr)
+    remainder = estimated_latent % 4
+    if remainder != 0:
+        estimated_latent += 4 - remainder
+    cr = int((args.patch_size * args.patch_size * 4) / estimated_latent)
     if cr <= 0:
         raise ValueError("Compression ratio must be a positive integer.")
     slurm_job_id = os.environ.get(

@@ -9,7 +9,7 @@ from tqdm import tqdm
 from loss import cond_loss
 
 from .base import BaseVAE
-from .layers import downsample_sequence, upsample_sequence
+from .layers import down_block, up_block
 
 
 class Cond_SRVAE(BaseVAE):
@@ -18,63 +18,143 @@ class Cond_SRVAE(BaseVAE):
             callbacks = []
         super(Cond_SRVAE, self).__init__(patch_size, callbacks)
         self.cr = cr
-        self.latent_size = int(patch_size * patch_size * 4 / self.cr)
-        self.latent_size_y = int(self.latent_size / 4)
+        self.latent_size = int((patch_size * patch_size * 4 / self.cr) // 16) * 16
+        self.latent_size_y = self.latent_size // 4
         self.patch_size = patch_size
         self.gammax = torch.tensor(1.0, requires_grad=True)
         self.gammay = torch.tensor(1.0, requires_grad=True)
 
-        self.encoder_y = downsample_sequence(
-            in_shape=(4, int(patch_size // 2), int(patch_size // 2)),
-            compression_ratio=self.cr / 2,
-            num_steps=5,
+        self.encoder_y = nn.Sequential(
+            down_block(in_channels=4, out_channels=64),  # out 16 , 16 , 16
+            down_block(in_channels=64, out_channels=256),  # out 64, 8, 8
+            down_block(
+                in_channels=256,
+                out_channels=512,
+            ),  # out 512, 4, 4
+            down_block(
+                in_channels=512,
+                out_channels=self.latent_size_y // 2,
+                with_bn=False,
+                with_relu=False,
+            ),  # out 512, 2, 2,
+            nn.Flatten(1),
+            # out 512 * 2 * 2 = 2048
         )
 
-        self.decoder_y = upsample_sequence(
-            in_flattened_size=(self.latent_size_y),
-            out_shape=(4, patch_size / 2, patch_size / 2),
+        self.decoder_y = nn.Sequential(
+            nn.Unflatten(1, (self.latent_size_y // 4, 2, 2)),
+            up_block(
+                in_channels=self.latent_size_y // 4,
+                out_channels=512,
+            ),
+            up_block(
+                in_channels=512,
+                out_channels=256,
+            ),
+            up_block(
+                in_channels=256,
+                out_channels=64,
+            ),
+            up_block(
+                in_channels=64,
+                out_channels=4,
+            ),
+            nn.Sigmoid(),  # Ensure output is in [0, 1]
         )
 
-        self.encoder_x = downsample_sequence(
-            in_shape=(4, patch_size, patch_size),
-            compression_ratio=self.cr / 2,
-            num_steps=5,
+        self.encoder_x = nn.Sequential(
+            down_block(in_channels=4, out_channels=16),
+            down_block(in_channels=16, out_channels=64),
+            down_block(
+                in_channels=64,
+                out_channels=256,
+            ),
+            down_block(
+                in_channels=256,
+                out_channels=self.latent_size // 8,
+                with_bn=False,
+                with_relu=False,
+            ),
+            nn.Flatten(1),
+            # out 1024 * 4 * 4 = 16384
+        )  # out 1024, 4, 4
+
+        self.decoder_x = nn.Sequential(
+            nn.Unflatten(1, (self.latent_size // 8, 4, 4)),
+            up_block(
+                in_channels=self.latent_size // 8,
+                out_channels=256,
+            ),
+            up_block(
+                in_channels=256,
+                out_channels=64,
+            ),
+            up_block(
+                in_channels=64,
+                out_channels=16,
+            ),
+            up_block(
+                in_channels=16,
+                out_channels=4,
+            ),
+            nn.Sigmoid(),  # Ensure output is in [0, 1]
         )
 
-        self.decoder_x = upsample_sequence(
-            in_flattened_size=(self.latent_size * 2),
-            out_shape=(4, patch_size, patch_size),
-        )
-
-        self.y_to_z = downsample_sequence(
-            in_shape=(4, patch_size // 2, patch_size // 2),
-            compression_ratio=self.cr / 4,
-            num_steps=5,
+        self.y_to_z = nn.Sequential(
+            down_block(in_channels=4, out_channels=32),
+            down_block(in_channels=32, out_channels=128),
+            down_block(
+                in_channels=128,
+                out_channels=512,
+            ),
+            down_block(
+                in_channels=512,
+                out_channels=self.latent_size // 4,
+                with_bn=False,
+                with_relu=False,
+            ),  # out 2048, 2, 2,
+            nn.Flatten(1),
+            # out 8192
         )
         # Replace Linear layers with Conv-based alternatives
-        # u_to_z: expects input of shape (batch, latent_size_y)
-        # We'll reshape to (batch, channels, 1, 1) and use a 1x1 Conv
         self.u_to_z = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size_y, 1, 1)),
-            nn.Conv2d(self.latent_size_y, self.latent_size_y * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size_y * 2, self.latent_size, kernel_size=1),
-            nn.Conv2d(self.latent_size, self.latent_size, kernel_size=1),
+            nn.Unflatten(1, (self.latent_size_y // 4, 2, 2)),
+            nn.Conv2d(
+                self.latent_size_y // 4,
+                self.latent_size_y // 4,
+                kernel_size=3,
+                padding=1,
+            ),
+            nn.Conv2d(
+                self.latent_size_y // 4, self.latent_size // 4, kernel_size=3, padding=1
+            ),
             nn.Flatten(1),
         )
-        # mu_u_y_to_z and logvar_u_y_to_z: input is (batch, latent_size*2)
-        # We'll reshape to (batch, latent_size*2, 1, 1) and use 1x1 Conv
+
         self.mu_u_y_to_z = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
+            nn.Unflatten(1, (self.latent_size * 2 // 64, 8, 8)),
+            nn.Conv2d(
+                self.latent_size * 2 // 64,
+                self.latent_size // 64,
+                kernel_size=3,
+                padding=1,
+            ),
+            nn.Conv2d(
+                self.latent_size // 64, self.latent_size // 64, kernel_size=3, padding=1
+            ),
             nn.Flatten(1),
         )
         self.logvar_u_y_to_z = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size * 2, 1, 1)),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size * 2, kernel_size=1),
-            nn.Conv2d(self.latent_size * 2, self.latent_size, kernel_size=1),
+            nn.Unflatten(1, (self.latent_size * 2 // 64, 8, 8)),
+            nn.Conv2d(
+                self.latent_size * 2 // 64,
+                self.latent_size // 64,
+                kernel_size=3,
+                padding=1,
+            ),
+            nn.Conv2d(
+                self.latent_size // 64, self.latent_size // 64, kernel_size=3, padding=1
+            ),
             nn.Flatten(1),
             nn.Hardtanh(-7, 7),
         )
@@ -90,7 +170,6 @@ class Cond_SRVAE(BaseVAE):
 
         u = self.u_to_z(u)
         u = u.view(u.size(0), -1)
-        print(f"y shape: {y.shape}, u shape: {u.shape}")
         jointure = torch.cat((y, u), dim=1)
 
         mu_u_y = self.mu_u_y_to_z(jointure)
@@ -125,7 +204,6 @@ class Cond_SRVAE(BaseVAE):
     def forward(self, x, y):
         mu_u, logvar_u = self.encode_y(y)
         u = self.reparameterize(mu_u, logvar_u)
-
         mu_z, logvar_z = self.encode_x(x)
         z = self.reparameterize(mu_z, logvar_z)
 

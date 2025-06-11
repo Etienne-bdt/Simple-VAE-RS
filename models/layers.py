@@ -68,14 +68,12 @@ class downsample_sequence(nn.Module):
             stride_plan = [2] * max_stride_steps + [1] * (steps - max_stride_steps)
         else:
             stride_plan = []
+
         # Plan progressive channel increase using powers of four
         if steps > 1:
             ch_progression = [
                 min(self.out_channels, in_shape[0] * (4**i)) for i in range(steps)
             ]
-            ch_progression[-1] = (
-                self.out_channels
-            )  # Ensure last is exactly self.out_channels
         else:
             ch_progression = [self.out_channels]
         for i in range(steps):
@@ -91,19 +89,16 @@ class downsample_sequence(nn.Module):
             self.layers.append(
                 nn.Conv2d(c, out_ch, kernel_size, stride=stride, padding=padding)
             )
+            self.layers.append(nn.BatchNorm2d(out_ch))
             # If not last layer, add ReLU activation
             if not is_last:
-                self.layers.append(self_attention(out_ch, num_heads=2))
-                self.layers.append(nn.BatchNorm2d(out_ch))
                 self.layers.append(nn.ReLU(inplace=True))
+            self.layers.append(self_attention(out_ch, num_heads=2))
             c = out_ch
             h = calculate_output_size(h, kernel_size, stride, padding)
             w = calculate_output_size(w, kernel_size, stride, padding)
         self.final_shape = (c, h, w)
-        if h > 1:
-            # If spatial dimensions are still larger than 1x1, apply adaptive pooling
-            self.layers.append(nn.AdaptiveAvgPool2d((1, 1)))
-            h, w = 1, 1
+
         self.flatten = nn.Flatten()
         assert c * h * w == out_flattened_size, (
             f"Final output shape {c}x{h}x{w} does not match requested flattened size {out_flattened_size}"
@@ -216,6 +211,89 @@ class upsample_sequence(nn.Module):
         for layer in self.layers:
             x = layer(x)
         x = self.sigmoid(x)
+        return x
+
+
+class down_block(nn.Module):
+    def __init__(self, in_channels, out_channels, with_relu=True, with_bn=True):
+        """
+        Downsampling block with convolution, batch normalization, and ReLU activation.
+
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            kernel_size (int): Size of the convolution kernel (default: 3).
+            stride (int): Stride for the convolution (default: 2).
+        """
+        super(down_block, self).__init__()
+        self.with_relu = with_relu
+        self.with_bn = with_bn
+        self.conv = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=1, padding=1
+        )
+        self.downsample = nn.Conv2d(
+            in_channels, out_channels, kernel_size=4, stride=2, padding=1
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        """
+        Forward pass through the downsampling block.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, out_channels, new_height, new_width).
+        """
+        x = self.conv(x)
+        x = self.downsample(x)
+        if self.with_bn:
+            x = self.bn(x)
+        if self.with_relu:
+            x = self.relu(x)
+        return x
+
+
+class up_block(nn.Module):
+    def __init__(self, in_channels, out_channels, with_relu=True, with_bn=True):
+        """
+        Upsampling block with transposed convolution, batch normalization, and ReLU activation.
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            kernel_size (int): Size of the transposed convolution kernel (default: 3).
+            stride (int): Stride for the transposed convolution (default: 2).
+        """
+        super(up_block, self).__init__()
+        self.with_relu = with_relu
+        self.with_bn = with_bn
+        self.conv = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=1, padding=1
+        )
+        self.upsample = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size=4, stride=2, padding=1
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        """
+        Forward pass through the upsampling block.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, out_channels, new_height, new_width).
+        """
+        x = self.conv(x)
+        x = self.upsample(x)
+        if self.with_bn:
+            x = self.bn(x)
+        if self.with_relu:
+            x = self.relu(x)
         return x
 
 
