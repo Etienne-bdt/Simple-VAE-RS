@@ -446,6 +446,11 @@ class Cond_SRVAE(BaseVAE):
 
                 if first:
                     imgs = {
+                        "y": y[:4],
+                        "x": x[:4],
+                        "y_bicubic": F.interpolate(y, scale_factor=2, mode="bicubic")[
+                            :4
+                        ],  # Bicubic interpolation for y
                         "y_hat": y_hat[:4],
                         "x_hat": x_hat[:4],
                         "x_sr": x_sr[:4],
