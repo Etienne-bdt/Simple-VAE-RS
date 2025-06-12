@@ -73,6 +73,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     "val_metrics_every": val_metrics_every,
                     "slurm_job_id": kwargs.get("slurm_job_id", "local"),
                     "Parameter_number": self.num_params,
+                    "cr": self.cr,
                 },
             ),
         )

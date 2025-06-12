@@ -47,7 +47,8 @@ class VAE(BaseVAE):
             ),
             nn.Conv2d(
                 in_channels=128,
-                out_channels=self.latent_size // 8,
+                out_channels=(self.latent_size // 64)
+                * 2,  # Output channels for mu and logvar
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -57,9 +58,9 @@ class VAE(BaseVAE):
         )
 
         self.decoder = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size // 16, 8, 8)),
+            nn.Unflatten(1, (self.latent_size // 64, 8, 8)),
             up_block(
-                in_channels=self.latent_size // 16,
+                in_channels=self.latent_size // 64,
                 out_channels=128,
             ),
             up_block(
@@ -194,7 +195,7 @@ class VAE(BaseVAE):
                 imgs_out = x_hat[:4]
 
         # log sample images
-        if epoch == 1:
+        if epoch % 5 == 0 or epoch == 1 or epoch == self.max_epochs:
             wandb_run.log(
                 {
                     "Images/Input": [
@@ -204,14 +205,15 @@ class VAE(BaseVAE):
                 },
                 step=epoch,
             )
-        wandb_run.log(
-            {
-                "Images/Reconstruction": [
-                    wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in imgs_out
-                ],
-            },
-            step=epoch,
-        )
+            wandb_run.log(
+                {
+                    "Images/Reconstruction": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs_out
+                    ],
+                },
+                step=epoch,
+            )
 
     def on_train_epoch_end(self, **kwargs):
         self.wandb_run.log(
