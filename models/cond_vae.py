@@ -18,46 +18,56 @@ class Cond_SRVAE(BaseVAE):
             callbacks = []
         super(Cond_SRVAE, self).__init__(patch_size, callbacks, slurm_job_id)
         self.cr = cr
-        self.latent_size = int((patch_size * patch_size * 4 / self.cr) // 16) * 16
+        self.latent_size = int((patch_size * patch_size * 4 / self.cr) // 64) * 64
         self.latent_size_y = self.latent_size // 4
         self.patch_size = patch_size
         self.gammax = torch.tensor(1.0, requires_grad=True)
         self.gammay = torch.tensor(1.0, requires_grad=True)
 
         self.encoder_y = nn.Sequential(
-            down_block(in_channels=4, out_channels=64),  # out 16 , 16 , 16
-            down_block(in_channels=64, out_channels=256),  # out 64, 8, 8
-            down_block(
-                in_channels=256,
-                out_channels=512,
-            ),  # out 512, 4, 4
-            down_block(
-                in_channels=512,
-                out_channels=self.latent_size_y // 2,
-                with_bn=False,
-                with_relu=False,
-            ),  # out 512, 2, 2,
-            nn.Flatten(1),
+            down_block(in_channels=4, out_channels=16),  # out 16 , 16 , 16
+            down_block(in_channels=16, out_channels=64),  # out 64, 8, 8
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128,
+                out_channels=self.latent_size_y // 8,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.Flatten(start_dim=1),  # Flatten to (batch_size, latent_size // 8)
             # out 512 * 2 * 2 = 2048
         )
 
         self.decoder_y = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size_y // 4, 2, 2)),
+            nn.Unflatten(1, (self.latent_size_y // 16, 8, 8)),
             up_block(
-                in_channels=self.latent_size_y // 4,
-                out_channels=512,
+                in_channels=self.latent_size_y // 16,
+                out_channels=128,
             ),
             up_block(
-                in_channels=512,
-                out_channels=256,
-            ),
-            up_block(
-                in_channels=256,
+                in_channels=128,
                 out_channels=64,
             ),
-            up_block(
-                in_channels=64,
-                out_channels=4,
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=64, out_channels=16, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=16, out_channels=16, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=16, out_channels=4, kernel_size=3, stride=1, padding=1
             ),
             nn.Sigmoid(),  # Ensure output is in [0, 1]
         )
@@ -67,22 +77,26 @@ class Cond_SRVAE(BaseVAE):
             down_block(in_channels=16, out_channels=64),
             down_block(
                 in_channels=64,
-                out_channels=256,
+                out_channels=128,
             ),
-            down_block(
-                in_channels=256,
+            nn.Conv2d(
+                in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128,
                 out_channels=self.latent_size // 8,
-                with_bn=False,
-                with_relu=False,
+                kernel_size=3,
+                stride=1,
+                padding=1,
             ),
             nn.Flatten(1),
             # out 1024 * 4 * 4 = 16384
         )  # out 1024, 4, 4
 
         self.decoder_x = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size // 8, 4, 4)),
+            nn.Unflatten(1, (self.latent_size // 16, 8, 8)),
             up_block(
-                in_channels=self.latent_size // 8,
+                in_channels=self.latent_size // 16,
                 out_channels=256,
             ),
             up_block(
@@ -93,27 +107,31 @@ class Cond_SRVAE(BaseVAE):
                 in_channels=64,
                 out_channels=16,
             ),
-            up_block(
-                in_channels=16,
-                out_channels=4,
+            nn.Conv2d(
+                in_channels=16, out_channels=16, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=16, out_channels=4, kernel_size=3, stride=1, padding=1
             ),
             nn.Sigmoid(),  # Ensure output is in [0, 1]
         )
 
         self.y_to_z = nn.Sequential(
-            down_block(in_channels=4, out_channels=32),
-            down_block(in_channels=32, out_channels=128),
-            down_block(
-                in_channels=128,
-                out_channels=512,
+            down_block(in_channels=4, out_channels=16),
+            down_block(in_channels=16, out_channels=64),
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
             ),
-            down_block(
-                in_channels=512,
-                out_channels=self.latent_size // 4,
-                with_bn=False,
-                with_relu=False,
-            ),  # out 2048, 2, 2,
-            nn.Flatten(1),
+            nn.Conv2d(
+                in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Flatten(start_dim=1),  # Flatten to (batch_size, latent_size // 3)
             # out 8192
         )
         # Replace Linear layers with Conv-based alternatives
@@ -411,7 +429,7 @@ class Cond_SRVAE(BaseVAE):
                 "x_sr": x_sr[:4],
             }
 
-        if epoch == 1:
+        if epoch % 10 == 0 or epoch == 1:
             # log sample images for the first epoch
             wandb_run.log(
                 {
@@ -424,25 +442,24 @@ class Cond_SRVAE(BaseVAE):
                 },
                 step=epoch,
             )
-
-        # log sample images
-        wandb_run.log(
-            {
-                "Images/LR_Recon": [
-                    wandb.Image(img.permute(1, 2, 0).cpu().numpy())
-                    for img in imgs["y_hat"]
-                ],
-                "Images/HR_Recon": [
-                    wandb.Image(img.permute(1, 2, 0).cpu().numpy())
-                    for img in imgs["x_hat"]
-                ],
-                "Images/SR_Output": [
-                    wandb.Image(img.permute(1, 2, 0).cpu().numpy())
-                    for img in imgs["x_sr"]
-                ],
-            },
-            step=epoch,
-        )
+            # log sample images
+            wandb_run.log(
+                {
+                    "Images/LR_Recon": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs["y_hat"]
+                    ],
+                    "Images/HR_Recon": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs["x_hat"]
+                    ],
+                    "Images/SR_Output": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs["x_sr"]
+                    ],
+                },
+                step=epoch,
+            )
 
     def on_train_start(self, **kwargs):
         self.gammax.requires_grad = True

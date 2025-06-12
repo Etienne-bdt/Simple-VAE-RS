@@ -27,46 +27,56 @@ class VAE(BaseVAE):
         super(VAE, self).__init__(patch_size, callbacks, slurm_job_id)
         self.cr = cr
         self.latent_size = (
-            int((patch_size * patch_size * 4 // self.cr) // 4) * 4
+            int((patch_size * patch_size * 4 // self.cr) // 16) * 16
         )  # Ensure latent size is a multiple of 4
         self.patch_size = patch_size
 
         self.gamma = torch.tensor(1.0, requires_grad=True)
 
         self.encoder = nn.Sequential(
-            down_block(in_channels=4, out_channels=64),  # out 16 , 16 , 16
-            down_block(in_channels=64, out_channels=256),  # out 64, 8, 8
-            down_block(
-                in_channels=256,
-                out_channels=512,
-            ),  # out 512, 4, 4
-            down_block(
-                in_channels=512,
-                out_channels=self.latent_size // 2,
-                with_bn=False,
-                with_relu=False,
-            ),  # out 512, 2, 2,
-            nn.Flatten(1),
+            down_block(in_channels=4, out_channels=16),  # out 16 , 16 , 16
+            down_block(in_channels=16, out_channels=64),  # out 64, 8, 8
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=128,
+                out_channels=self.latent_size // 8,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.Flatten(start_dim=1),  # Flatten to (batch_size, latent_size // 8)
             # out 512 * 2 * 2 = 2048
         )
 
         self.decoder = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size // 4, 2, 2)),
+            nn.Unflatten(1, (self.latent_size // 16, 8, 8)),
             up_block(
-                in_channels=self.latent_size // 4,
-                out_channels=512,
+                in_channels=self.latent_size // 16,
+                out_channels=128,
             ),
             up_block(
-                in_channels=512,
-                out_channels=256,
-            ),
-            up_block(
-                in_channels=256,
+                in_channels=128,
                 out_channels=64,
             ),
-            up_block(
-                in_channels=64,
-                out_channels=4,
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=64, out_channels=16, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=16, out_channels=16, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=16, out_channels=4, kernel_size=3, stride=1, padding=1
             ),
             nn.Sigmoid(),  # Ensure output is in [0, 1]
         )
