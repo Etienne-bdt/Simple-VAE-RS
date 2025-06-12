@@ -73,6 +73,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
                     "val_metrics_every": val_metrics_every,
                     "slurm_job_id": kwargs.get("slurm_job_id", "local"),
                     "Parameter_number": self.num_params,
+                    "cr": self.cr,
                 },
             ),
         )
@@ -335,7 +336,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
         plt.subplot(2, 4, 7)
         plt.imshow(std, cmap="hot")
         plt.colorbar()
-        plt.title(f"Standard Deviation of Samples, Mean: {std.mean():.2f}")
+        plt.title(f"STD of Samples, Mean: {std.mean():.2f}")
         plt.subplot(2, 4, 8)
         mean_bias = (target - samples.mean(dim=0)).mean(dim=0).mean(dim=0).cpu().numpy()
         plt.imshow(mean_bias, cmap="hot")

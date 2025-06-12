@@ -19,11 +19,7 @@ def main(args):
         args.dataset, args.batch_size, args.patch_size
     )
     cr = args.compression_ratio
-    estimated_latent = int(args.patch_size * args.patch_size * 4 / cr)
-    remainder = estimated_latent % 4
-    if remainder != 0:
-        estimated_latent += 4 - remainder
-    cr = int((args.patch_size * args.patch_size * 4) / estimated_latent)
+
     if cr <= 0:
         raise ValueError("Compression ratio must be a positive integer.")
     slurm_job_id = os.environ.get(
@@ -58,13 +54,13 @@ def main(args):
     if args.model_ckpt:
         print("Loading model from checkpoint...")
         save_dict = torch.load(args.model_ckpt)
-        start_epoch = save_dict["epoch"] + 1
-        model.load_state_dict(save_dict["model_state_dict"])
+        # start_epoch = save_dict["epoch"] + 1
+        model.load_state_dict(save_dict)
         print("Model loaded successfully.")
-        print("Loading optimizer state...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-        optimizer.load_state_dict(save_dict["optimizer_state_dict"])
-        print("Optimizer state loaded successfully.")
+        # print("Loading optimizer state...")
+        # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        # optimizer.load_state_dict(save_dict["optimizer_state_dict"])
+        # print("Optimizer state loaded successfully.")
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
         start_epoch = 1
