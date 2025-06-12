@@ -58,7 +58,9 @@ class VAE(BaseVAE):
         )
 
         self.decoder = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size // 64, 8, 8)),
+            nn.Unflatten(
+                1, (self.latent_size // 64, patch_size // 2**2, patch_size // 2**2)
+            ),
             up_block(
                 in_channels=self.latent_size // 64,
                 out_channels=128,
@@ -195,7 +197,7 @@ class VAE(BaseVAE):
                 imgs_out = x_hat[:4]
 
         # log sample images
-        if epoch % 5 == 0 or epoch == 1 or epoch == self.max_epochs:
+        if epoch % 5 == 0 or epoch == 1:
             wandb_run.log(
                 {
                     "Images/Input": [

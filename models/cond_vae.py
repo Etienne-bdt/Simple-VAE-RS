@@ -49,7 +49,14 @@ class Cond_SRVAE(BaseVAE):
         )
 
         self.decoder_y = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size_y // 64, 8, 8)),
+            nn.Unflatten(
+                1,
+                (
+                    self.latent_size_y // 64,
+                    self.patch_size // 2**3,
+                    self.patch_size // 2**3,
+                ),
+            ),
             up_block(
                 in_channels=self.latent_size_y // 64,
                 out_channels=128,
@@ -101,7 +108,14 @@ class Cond_SRVAE(BaseVAE):
         )  # out 1024, 4, 4
 
         self.decoder_x = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size * 2 // 64, 8, 8)),
+            nn.Unflatten(
+                1,
+                (
+                    self.latent_size * 2 // 64,
+                    self.patch_size // 2**3,
+                    self.patch_size // 2**3,
+                ),
+            ),
             up_block(
                 in_channels=self.latent_size * 2 // 64,
                 out_channels=256,
@@ -151,7 +165,14 @@ class Cond_SRVAE(BaseVAE):
         )
         # Replace Linear layers with Conv-based alternatives
         self.u_to_z = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size_y // 16, 4, 4)),
+            nn.Unflatten(
+                1,
+                (
+                    self.latent_size_y // 16,
+                    self.patch_size // 2**4,
+                    self.patch_size // 2**4,
+                ),
+            ),
             nn.Conv2d(
                 self.latent_size_y // 16,
                 self.latent_size_y // 16,
@@ -168,7 +189,14 @@ class Cond_SRVAE(BaseVAE):
         )
 
         self.mu_u_y_to_z = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size * 2 // 16, 4, 4)),
+            nn.Unflatten(
+                1,
+                (
+                    self.latent_size * 2 // 16,
+                    self.patch_size // 2**4,
+                    self.patch_size // 2**4,
+                ),
+            ),
             nn.Conv2d(
                 self.latent_size * 2 // 16,
                 self.latent_size // 16,
@@ -181,7 +209,14 @@ class Cond_SRVAE(BaseVAE):
             nn.Flatten(1),
         )
         self.logvar_u_y_to_z = nn.Sequential(
-            nn.Unflatten(1, (self.latent_size * 2 // 16, 4, 4)),
+            nn.Unflatten(
+                1,
+                (
+                    self.latent_size * 2 // 16,
+                    self.patch_size // 2**4,
+                    self.patch_size // 2**4,
+                ),
+            ),
             nn.Conv2d(
                 self.latent_size * 2 // 16,
                 self.latent_size // 16,
@@ -442,27 +477,32 @@ class Cond_SRVAE(BaseVAE):
                 x_sr = self.conditional_generation(y)
 
             imgs = {
+                "y": y[:4],
+                "x": x[:4],
+                "y_bicubic": F.interpolate(y, scale_factor=2, mode="bicubic")[
+                    :4
+                ],  # Bicubic interpolation for y
                 "y_hat": y_hat[:4],
                 "x_hat": x_hat[:4],
                 "x_sr": x_sr[:4],
             }
 
-        if epoch % 10 == 0 or epoch == 1 or epoch == self.max_epochs:
-            # log sample images for the first epoch
-            wandb_run.log(
-                {
-                    "Images/LR_Input": [
-                        wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in y[:4]
-                    ],
-                    "Images/HR_Input": [
-                        wandb.Image(img.permute(1, 2, 0).cpu().numpy()) for img in x[:4]
-                    ],
-                },
-                step=epoch,
-            )
+        if epoch % 10 == 0 or epoch == 1:
             # log sample images
             wandb_run.log(
                 {
+                    "Images/LR_Input": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs["y"]
+                    ],
+                    "Images/HR_Input": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs["x"]
+                    ],
+                    "Images/LR_Bicubic": [
+                        wandb.Image(img.permute(1, 2, 0).cpu().numpy())
+                        for img in imgs["y_bicubic"]
+                    ],
                     "Images/LR_Recon": [
                         wandb.Image(img.permute(1, 2, 0).cpu().numpy())
                         for img in imgs["y_hat"]
@@ -553,8 +593,8 @@ class Cond_SRVAE(BaseVAE):
             y.to(next(self.parameters()).device),
             x.to(next(self.parameters()).device),
         )
-        return y[0:1, :, :, :], x[
-            0:1, :, :, :
+        return y[1:2, :, :, :], x[
+            1:2, :, :, :
         ]  # Return a single sample for task evaluation
 
 
