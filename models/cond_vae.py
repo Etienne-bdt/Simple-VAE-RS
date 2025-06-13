@@ -98,14 +98,49 @@ class Cond_SRVAE(BaseVAE):
             ),
             nn.Conv2d(
                 in_channels=128,
-                out_channels=(self.latent_size // 64) * 2,
+                out_channels=(self.latent_size // 64),
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            # out 1024 * 4 * 4 = 16384
+        )  # out 1024, 4, 4
+
+        self.z_carac = nn.Sequential(
+            down_block(
+                in_channels=self.latent_size * 3 // 64,
+                out_channels=self.latent_size * 3 // 32,
+            ),
+            nn.Conv2d(
+                in_channels=self.latent_size * 3 // 32,
+                out_channels=self.latent_size * 3 // 32,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.Conv2d(
+                in_channels=self.latent_size * 3 // 32,
+                out_channels=self.latent_size * 3 // 16,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.Conv2d(
+                in_channels=self.latent_size * 3 // 16,
+                out_channels=self.latent_size * 2 // 16,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.Conv2d(
+                in_channels=self.latent_size * 2 // 16,
+                out_channels=self.latent_size * 2 // 16,
                 kernel_size=3,
                 stride=1,
                 padding=1,
             ),
             nn.Flatten(1),
-            # out 1024 * 4 * 4 = 16384
-        )  # out 1024, 4, 4
+        )
 
         self.decoder_x = nn.Sequential(
             nn.Unflatten(
@@ -146,21 +181,23 @@ class Cond_SRVAE(BaseVAE):
         self.y_to_z = nn.Sequential(
             down_block(in_channels=4, out_channels=16),
             down_block(in_channels=16, out_channels=64),
-            down_block(
-                in_channels=64,
-                out_channels=128,
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
+            ),
+            nn.Conv2d(
+                in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1
             ),
             nn.Conv2d(
                 in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1
             ),
             nn.Conv2d(
                 in_channels=128,
-                out_channels=self.latent_size // 16,
+                out_channels=self.latent_size // 64,
                 kernel_size=3,
                 stride=1,
                 padding=1,
             ),
-            nn.Flatten(start_dim=1),  # Flatten to (batch_size, latent_size // 3)
+            # Flatten to (batch_size, latent_size // 3)
             # out 8192
         )
         # Replace Linear layers with Conv-based alternatives
@@ -168,27 +205,38 @@ class Cond_SRVAE(BaseVAE):
             nn.Unflatten(
                 1,
                 (
-                    self.latent_size_y // 16,
-                    self.patch_size // 2**4,
-                    self.patch_size // 2**4,
+                    self.latent_size_y // 64,
+                    self.patch_size // 2**3,
+                    self.patch_size // 2**3,
                 ),
             ),
             nn.Conv2d(
-                self.latent_size_y // 16,
-                self.latent_size_y // 8,
+                self.latent_size_y // 64,
+                self.latent_size_y // 64,
                 kernel_size=3,
                 padding=1,
             ),
             nn.Conv2d(
-                self.latent_size_y // 16,
-                self.latent_size // 16,
+                self.latent_size_y // 64,
+                self.latent_size_y // 32,
                 kernel_size=3,
                 padding=1,
             ),
-            nn.Flatten(1),
+            nn.Conv2d(
+                self.latent_size_y // 32,
+                self.latent_size_y // 32,
+                kernel_size=3,
+                padding=1,
+            ),
+            nn.Conv2d(
+                self.latent_size_y // 32,
+                self.latent_size_y // 16,
+                kernel_size=3,
+                padding=1,
+            ),
         )
 
-        self.mu_u_y_to_z = nn.Sequential(
+        self.uy_z = nn.Sequential(
             nn.Unflatten(
                 1,
                 (
@@ -206,28 +254,13 @@ class Cond_SRVAE(BaseVAE):
             nn.Conv2d(
                 self.latent_size // 16, self.latent_size // 16, kernel_size=3, padding=1
             ),
-            nn.Flatten(1),
-        )
-        self.logvar_u_y_to_z = nn.Sequential(
-            nn.Unflatten(
-                1,
-                (
-                    self.latent_size * 2 // 16,
-                    self.patch_size // 2**4,
-                    self.patch_size // 2**4,
-                ),
-            ),
             nn.Conv2d(
-                self.latent_size * 2 // 16,
                 self.latent_size // 16,
+                self.latent_size * 2 // 16,
                 kernel_size=3,
                 padding=1,
             ),
-            nn.Conv2d(
-                self.latent_size // 16, self.latent_size // 16, kernel_size=3, padding=1
-            ),
             nn.Flatten(1),
-            nn.Hardtanh(-7, 7),
         )
 
         self.num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -236,17 +269,12 @@ class Cond_SRVAE(BaseVAE):
 
     def z_cond(self, y, u):
         # Define the encoder part of the VAE
-        y = self.y_to_z(y)
-        y = y.view(y.size(0), -1)
 
-        u = self.u_to_z(u)
-        u = u.view(u.size(0), -1)
         jointure = torch.cat((y, u), dim=1)
 
-        mu_u_y = self.mu_u_y_to_z(jointure)
-        logvar_u_y = self.logvar_u_y_to_z(jointure)
+        uy_z = self.uy_z(jointure)
 
-        return mu_u_y, logvar_u_y
+        return torch.chunk(uy_z, 2, dim=1)
 
     def encode_y(self, y):
         # Define the encoder part of the VAE
@@ -255,8 +283,7 @@ class Cond_SRVAE(BaseVAE):
 
     def encode_x(self, x):
         # Define the encoder part of the VAE
-        x = self.encoder_x(x)
-        return torch.chunk(x, 2, dim=1)
+        return self.encoder_x(x)
 
     def reparameterize(self, mu, logvar):
         # Reparameterization trick
@@ -268,20 +295,26 @@ class Cond_SRVAE(BaseVAE):
         return self.decoder_y(u)
 
     def decode_x(self, z, y, u):
-        y_enc = self.y_to_z(y)
-        u_enc = self.u_to_z(u)
-        stack = torch.cat((u_enc, y_enc, z), dim=1)
+        stack = torch.cat((u, y, z), dim=1)
         return self.decoder_x(stack)
 
     def forward(self, x, y):
         mu_u, logvar_u = self.encode_y(y)
         u = self.reparameterize(mu_u, logvar_u)
-        mu_z, logvar_z = self.encode_x(x)
+        x_enc = self.encode_x(x)
+        y_enc = self.y_to_z(y)
+        u_enc = self.u_to_z(u)
+
+        mu_z, logvar_z = torch.chunk(
+            self.z_carac(torch.cat((x_enc, y_enc, u_enc), dim=1)), 2, dim=1
+        )
         z = self.reparameterize(mu_z, logvar_z)
 
-        mu_z_uy, logvar_z_uy = self.z_cond(y, u)
+        y_enc = y_enc.view(y_enc.size(0), -1)
+        u_enc = u_enc.view(u_enc.size(0), -1)
+        mu_z_uy, logvar_z_uy = self.z_cond(y_enc, u_enc)
 
-        x_hat = self.decode_x(z, y, u)
+        x_hat = self.decode_x(z, y_enc, u_enc)
         y_hat = self.decode_y(u)
 
         return x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy
