@@ -314,7 +314,7 @@ class BaseVAE(nn.Module, metaclass=abc.ABCMeta):
 
         plt.figure(figsize=(20, 10))
         plt.subplot(2, 4, 1)
-        plt.imshow(target[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))
+        plt.imshow(pred[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))
         plt.title("Input Image")
         plt.subplot(2, 4, 2)
         plt.imshow(samples[0, [2, 1, 0], :, :].cpu().numpy().transpose(1, 2, 0))

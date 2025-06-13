@@ -111,13 +111,13 @@ class Cond_SRVAE(BaseVAE):
             nn.Unflatten(
                 1,
                 (
-                    self.latent_size * 2 // 64,
+                    self.latent_size * 3 // 64,
                     self.patch_size // 2**3,
                     self.patch_size // 2**3,
                 ),
             ),
             up_block(
-                in_channels=self.latent_size * 2 // 64,
+                in_channels=self.latent_size * 3 // 64,
                 out_channels=256,
             ),
             up_block(
@@ -175,7 +175,7 @@ class Cond_SRVAE(BaseVAE):
             ),
             nn.Conv2d(
                 self.latent_size_y // 16,
-                self.latent_size_y // 16,
+                self.latent_size_y // 8,
                 kernel_size=3,
                 padding=1,
             ),
@@ -267,9 +267,10 @@ class Cond_SRVAE(BaseVAE):
     def decode_y(self, u):
         return self.decoder_y(u)
 
-    def decode_x(self, z, y):
+    def decode_x(self, z, y, u):
         y_enc = self.y_to_z(y)
-        stack = torch.cat((y_enc, z), dim=1)
+        u_enc = self.u_to_z(u)
+        stack = torch.cat((u_enc, y_enc, z), dim=1)
         return self.decoder_x(stack)
 
     def forward(self, x, y):
@@ -280,7 +281,7 @@ class Cond_SRVAE(BaseVAE):
 
         mu_z_uy, logvar_z_uy = self.z_cond(y, u)
 
-        x_hat = self.decode_x(z, y)
+        x_hat = self.decode_x(z, y, u)
         y_hat = self.decode_y(u)
 
         return x_hat, y_hat, mu_z, logvar_z, mu_u, logvar_u, mu_z_uy, logvar_z_uy
@@ -293,15 +294,32 @@ class Cond_SRVAE(BaseVAE):
         mu_z_uy, logvar_z_uy = self.z_cond(y, u)
         z = self.reparameterize(mu_z_uy, logvar_z_uy)
 
-        x_hat = self.decode_x(z, y)
+        x_hat = self.decode_x(z, y, u)
         return x_hat
 
     def sample(self, y, samples=1000) -> torch.Tensor:
         # Generate samples from the model
         mu_u, logvar_u = self.encode_y(y)
-        u = self.reparameterize(mu_u, logvar_u)
+
+        std_u = torch.exp(0.5 * logvar_u)
+        latent_u = std_u.size(1)
+        eps_u = torch.randn((samples, latent_u)).to(y.device)
+
+        u = mu_u + eps_u * std_u
+
+        if y.ndim == 3:
+            y = y.unsqueeze(0)
+            # Using expand to not reallocate for the same tensor
+            y = y.expand(u.size(0) - 1, -1, -1)
+        elif y.ndim == 4 and y.size(0) == 1:
+            y = y.expand(u.size(0), -1, -1, -1)
 
         mu_z_uy, logvar_z_uy = self.z_cond(y, u)
+
+        mu_z_uy, logvar_z_uy = (
+            mu_z_uy.mean(dim=0).unsqueeze(0),
+            logvar_z_uy.mean(dim=0).unsqueeze(0),
+        )
 
         std = torch.exp(0.5 * logvar_z_uy)
         latent = std.size(1)
@@ -309,13 +327,8 @@ class Cond_SRVAE(BaseVAE):
 
         z = mu_z_uy + eps * std
 
-        if y.ndim == 3:
-            y = y.unsqueeze(0)
-            # Using expand to not reallocate for the same tensor
-            y = y.expand(z.size(0), -1, -1, -1)
-        elif y.ndim == 4 and y.size(0) == 1:
-            y = y.expand(z.size(0), -1, -1, -1)
-        return self.decode_x(z, y)
+        print(f"y shape: {y.shape}, u shape: {u.shape}, z shape: {z.shape}")
+        return self.decode_x(z, y, u)
 
     def generation(self):
         u = torch.randn(1, self.latent_size_y).to("cuda")
@@ -598,8 +611,8 @@ class Cond_SRVAE(BaseVAE):
             y.to(next(self.parameters()).device),
             x.to(next(self.parameters()).device),
         )
-        return y[1:2, :, :, :], x[
-            1:2, :, :, :
+        return y[14:15, :, :, :], x[
+            14:15, :, :, :
         ]  # Return a single sample for task evaluation
 
 
